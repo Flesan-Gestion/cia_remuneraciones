@@ -1,0 +1,3 @@
+Worker de MapLibre GL (v6) para el mapa del laboratorio de gráficos. Copiado tal cual de
+node_modules/maplibre-gl/dist/ (maplibre-gl-worker.mjs + maplibre-gl-shared.mjs). Si se
+actualiza maplibre-gl, hay que volver a copiarlos (deben ser de la misma versión).

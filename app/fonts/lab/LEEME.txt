@@ -1,0 +1,4 @@
+Fuentes solo para el laboratorio de diseño (/ui-kit/laboratorio/<sección>), para comparar
+opciones de tipografía de reportes. Todas son OFL, descargadas del repo google/fonts
+(versiones variables): Manrope, DM Sans, Source Sans 3, Geist, IBM Plex Sans.
+Si una se elige como estándar, se promueve a app/layout.tsx y el resto se borra.

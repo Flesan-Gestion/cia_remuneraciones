@@ -1,0 +1,1123 @@
+/* ============================================================
+   SHELL · estándar común de las plataformas de la CIA (mockup_plataforma, ver docs/SHELL.md).
+   Tokens de marca, escala fluida, densidad compacta, componentes base y el marco (sidebar,
+   barra superior, portales, estado de los datos). Igual en todas las plataformas: no se edita
+   por plataforma; lo propio de cada una va en app/globals.css, después del @import.
+   ============================================================ */
+
+/* Modo oscuro por clase (next-themes attribute="class"). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   GRUPO FLESAN · DESIGN TOKENS
+   ============================================================ */
+
+@theme {
+  /* Brand (constantes en ambos temas) */
+  --color-flesan-red: #e30613;
+  --color-flesan-red-dark: #b30000;
+  --color-flesan-red-light: #ff3a3a;
+  --color-flesan-black: #231f20;
+  --color-flesan-steel: #58595b;
+  --color-flesan-warm: #a8a9a9;
+  --color-flesan-light: #d9d9d9;
+  --color-flesan-off: #f4f4f4;
+
+  /* Status */
+  --color-status-ok: #16a34a;
+  --color-status-warn: #f59e0b;
+  --color-status-down: #e30613;
+  /* Velo del tutorial guiado (components/tutorial): oscurece todo menos la zona del paso. */
+  --color-tutorial-velo: rgb(10 12 16 / 0.62);
+
+  /* Semánticos — modo claro */
+  --color-bg: #f4f4f4;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafafa;
+  --color-border: #e2e2e2;
+  --color-border-strong: #d9d9d9;
+  --color-text: #231f20;
+  --color-muted: #58595b;
+  --color-faint: #8b8c8e;
+
+  /* Radius — contenedores (cards, inputs, chips, badges, popovers) llevan
+     esquina suave. Los botones se mantienen angulares por defecto (marca
+     industrial); `.btn-flesan-pill` sigue siendo la única excepción ahí. */
+  --radius-flesan: 0.625rem;
+  --radius-flesan-sm: 0.25rem; /* piezas chicas (badge) — mismo radio se vería a pill */
+
+  /* Fonts (variables set in layout.tsx via next/font) */
+  --font-display: var(--font-barlow-condensed), "Arial Narrow", sans-serif;
+  --font-body: var(--font-barlow), "Arial", sans-serif;
+  --font-label: var(--font-barlow-semi), "Arial", sans-serif;
+
+  /* Easing + duration */
+  --ease-flesan-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-flesan-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Dataviz — paleta cualitativa para series de gráficos (ver /ui-kit →
+     Gráficos). --color-chart-1 es siempre el rojo de marca (serie
+     principal); el resto son de apoyo para multi-serie, nunca para CTAs. */
+  --color-chart-1: #e30613;
+  --color-chart-2: #231f20;
+  --color-chart-3: #58595b;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #16a34a;
+  --color-chart-grid: #e2e2e2;
+
+  /* Series de reportería (Reporte Tipo 1, components/reporte/): paleta amplia aprobada para
+     datos, tomada del panel de Conflicto de Interés. Distinguen categorías en gráficos y
+     tablas; nunca van en botones ni en llamados a la acción (ahí el rojo Flesan sigue siendo
+     el único acento). En oscuro suben de luminosidad. */
+  --color-serie-1: #2f6fdb; /* azul */
+  --color-serie-2: #c98a12; /* ámbar */
+  --color-serie-3: #d93a40; /* rojo de datos (no es el rojo de marca) */
+  --color-serie-4: #6f5ce0; /* morado */
+  --color-serie-5: #1e9160; /* verde */
+  --color-serie-6: #d9602a; /* naranjo */
+  --color-serie-7: #c93d74; /* rosado */
+  --color-serie-8: #7a7a82; /* gris: «Otras» */
+}
+
+/* Modo oscuro — premium dark surfaces */
+.dark {
+  --color-tutorial-velo: rgb(0 0 0 / 0.72);
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-surface-2: #232323;
+  --color-border: #2c2c2c;
+  --color-border-strong: #3a3a3a;
+  --color-text: #f4f4f4;
+  --color-muted: #a8a9a9;
+  --color-faint: #6b6b6b;
+
+  /* chart-2 es --flesan-black en claro (invisible sobre fondo oscuro) */
+  --color-chart-2: #f4f4f4;
+  --color-chart-grid: #2c2c2c;
+
+  --color-serie-1: #4c8df6;
+  --color-serie-2: #f2b33d;
+  --color-serie-3: #e5484d;
+  --color-serie-4: #8b7cf6;
+  --color-serie-5: #22a06b;
+  --color-serie-6: #e0662f;
+  --color-serie-7: #d6457f;
+  --color-serie-8: #6b6b73;
+}
+
+/* ============================================================
+   RESET + BASE
+   ============================================================ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Tamaño raíz: fluida suave. 14px hasta ~1100px de viewport, sube lineal y topa en 16px
+   hacia ~1500px. Cambia poco entre notebook y monitor, y el zoom del navegador y la escala
+   de Windows (100/125/150%) siguen funcionando casi en todo el rango. Como el spacing y la
+   tipografía están en rem (Tailwind), texto, padding, gaps y max-w-* acompañan. No afecta
+   tamaños en px puro (algún `text-[10px]` suelto), que quedan fijos a propósito.
+   Reemplaza a la raíz clamp(13px, 1.05vw, 20px), que agrandaba todo en monitores anchos. */
+html {
+  font-size: clamp(14px, calc(8.5px + 0.5vw), 16px);
+}
+
+/* Tamaño elegido en «Mi personalización» (components/preferencias.ts): corre la misma escala
+   fluida un punto abajo o arriba. */
+html[data-texto="chico"] {
+  font-size: clamp(13px, calc(7.5px + 0.5vw), 15px);
+}
+html[data-texto="grande"] {
+  font-size: clamp(15px, calc(9.5px + 0.5vw), 17.5px);
+}
+/* «Reducir animaciones» en Mi personalización: equivale a prefers-reduced-motion. */
+html[data-reducir-animaciones] *,
+html[data-reducir-animaciones] *::before,
+html[data-reducir-animaciones] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Densidad: compacta por defecto en toda la plataforma (reportes, tablas, filtros).
+   Para una pantalla de formulario largo, poner data-densidad="comoda" en su contenedor.
+   Consumen estos tokens: .btn-flesan, .field-input, .dens-card, .dens-gap, .dens-control,
+   .dens-tabla y las celdas de TB-1xx. */
+:root,
+[data-densidad="compacta"] {
+  --densidad-control: 2.25rem;
+  --densidad-celda-y: 0.375rem;
+  --densidad-celda-x: 0.75rem;
+  --densidad-card: 1rem;
+  --densidad-gap: 1rem;
+  --densidad-texto: 0.8125rem;
+  --densidad-btn-x: 1rem;
+  --densidad-btn-texto: 0.75rem;
+  --densidad-btn-tracking: 0.1em;
+}
+[data-densidad="comoda"] {
+  --densidad-control: 2.75rem;
+  --densidad-celda-y: 0.75rem;
+  --densidad-celda-x: 1rem;
+  --densidad-card: 1.5rem;
+  --densidad-gap: 1.5rem;
+  --densidad-texto: 0.875rem;
+  --densidad-btn-x: 1.5rem;
+  --densidad-btn-texto: 0.875rem;
+  --densidad-btn-tracking: 0.15em;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 200ms var(--ease-flesan-out), color 200ms var(--ease-flesan-out);
+}
+
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* Ancho de contenido de las páginas: todo el ancho útil, con tope en 120rem (1920px) para
+   que en monitores de 2560+ las tablas y grillas no se estiren sin fin. Los bloques de
+   texto y los formularios siguen acotados por su propio max-w-*. */
+.page-shell {
+  width: 100%;
+  max-width: 120rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+@media (min-width: 1024px) {
+  .page-shell {
+    padding-inline: 2rem;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-flesan-red);
+  outline-offset: 2px;
+}
+
+/* Scrollbar discreto */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* ============================================================
+   TYPE UTILITIES
+   ============================================================ */
+
+.display-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.label-eyebrow {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+.label-meta {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.body-lede {
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--color-muted);
+}
+
+.brand-bullet::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  background: var(--color-flesan-red);
+  vertical-align: middle;
+}
+
+/* ============================================================
+   SURFACES / CARDS
+   ============================================================ */
+
+.surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-flesan);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-flesan);
+  transition: border-color 150ms var(--ease-flesan-out), box-shadow 150ms var(--ease-flesan-out),
+    transform 150ms var(--ease-flesan-out);
+}
+
+@media (hover: hover) {
+  .card-hover:hover {
+    border-color: var(--color-flesan-red);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Fila de KPIs alineada: cada .kpi-card comparte las 3 filas de la grilla padre
+   (título / valor / pie) vía subgrid, así un título que ocupa 2 líneas empuja a
+   todas las tarjetas de esa fila y los valores quedan siempre a la misma altura.
+   Uso: <div class="kpi-fila grid grid-cols-4 gap-4"> <div class="card kpi-card">
+   con título, valor y pie como hijos directos. Fuera de .kpi-fila, la tarjeta
+   funciona igual, solo sin alinearse con sus vecinas. */
+.kpi-card {
+  display: grid;
+  row-gap: 0.25rem;
+  align-content: start;
+}
+.kpi-fila > .kpi-card {
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.btn-flesan {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: var(--densidad-control);
+  padding: 0 var(--densidad-btn-x);
+  font-family: var(--font-label);
+  font-size: var(--densidad-btn-texto);
+  font-weight: 600;
+  letter-spacing: var(--densidad-btn-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-flesan-out),
+    border-color 150ms var(--ease-flesan-out), color 150ms var(--ease-flesan-out),
+    transform 100ms var(--ease-flesan-out);
+}
+.btn-flesan:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-flesan:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn-flesan-primary {
+  background: var(--color-flesan-red);
+  border-color: var(--color-flesan-red);
+  color: #fff;
+}
+.btn-flesan-primary:hover:not(:disabled) {
+  background: var(--color-flesan-red-dark);
+  border-color: var(--color-flesan-red-dark);
+}
+.btn-flesan-ghost {
+  background: transparent;
+  border-color: var(--color-border-strong);
+  color: var(--color-muted);
+}
+.btn-flesan-ghost:hover:not(:disabled) {
+  border-color: var(--color-text);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.btn-flesan-dark {
+  background: var(--color-flesan-black);
+  border-color: var(--color-flesan-black);
+  color: #fff;
+}
+.dark .btn-flesan-dark {
+  background: #fff;
+  border-color: #fff;
+  color: var(--color-flesan-black);
+}
+
+.btn-flesan-lg {
+  height: calc(var(--densidad-control) + 0.25rem);
+  padding: 0 2rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.12em;
+}
+.btn-flesan-sm {
+  height: calc(var(--densidad-control) - 0.5rem);
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+/* Outline de estado — para confirmar/descartar (borrar, rechazar, aprobar),
+   nunca para CTAs de marca (esas siguen siendo -primary, rojo Flesan). */
+.btn-flesan-outline-danger {
+  background: transparent;
+  border-color: var(--color-status-down);
+  color: var(--color-status-down);
+}
+.btn-flesan-outline-danger:hover:not(:disabled) {
+  background: var(--color-status-down);
+  color: #fff;
+}
+.btn-flesan-outline-success {
+  background: transparent;
+  border-color: var(--color-status-ok);
+  color: var(--color-status-ok);
+}
+.btn-flesan-outline-success:hover:not(:disabled) {
+  background: var(--color-status-ok);
+  color: #fff;
+}
+
+/* Solo ícono — cuadrado, sin padding horizontal (icono centrado por flex). */
+.btn-flesan-icon {
+  width: var(--densidad-control);
+  height: var(--densidad-control);
+  padding: 0;
+}
+.btn-flesan-icon.btn-flesan-sm {
+  width: calc(var(--densidad-control) - 0.5rem);
+  height: calc(var(--densidad-control) - 0.5rem);
+}
+
+/* Pill — mismo btn-flesan, esquinas redondeadas en vez de rectas. Uso
+   puntual (ej. filtros tipo tag), no reemplaza el estilo angular por defecto. */
+.btn-flesan-pill {
+  border-radius: 9999px;
+}
+
+/* ============================================================
+   CHIPS / BADGES
+   ============================================================ */
+
+.chip-flesan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-flesan);
+  color: var(--color-muted);
+  padding: 0.5rem 0.875rem;
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 150ms var(--ease-flesan-out),
+    border-color 150ms var(--ease-flesan-out), color 150ms var(--ease-flesan-out);
+}
+@media (hover: hover) {
+  .chip-flesan:hover:not(.is-active) {
+    border-color: var(--color-text);
+    color: var(--color-text);
+  }
+}
+.chip-flesan.is-active {
+  background: color-mix(in srgb, var(--color-flesan-black) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-flesan-black) 24%, transparent);
+  color: var(--color-text);
+}
+.dark .chip-flesan.is-active {
+  background: color-mix(in srgb, #fff 14%, transparent);
+  border-color: color-mix(in srgb, #fff 28%, transparent);
+  color: var(--color-text);
+}
+
+/* Toggle on/off — dos opciones dentro de una pastilla; la activa se marca con
+   un botón circular sólido (ver ThemeToggle y NavStyleToggle). */
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.1875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-2);
+}
+
+.toggle-pill-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-flesan-out), color 150ms var(--ease-flesan-out);
+}
+@media (hover: hover) {
+  .toggle-pill-option:hover:not(.is-active) {
+    color: var(--color-text);
+  }
+}
+.toggle-pill-option.is-active {
+  background: var(--color-flesan-black);
+  color: #fff;
+}
+.dark .toggle-pill-option.is-active {
+  background: #fff;
+  color: var(--color-flesan-black);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-label);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-flesan-sm);
+  color: var(--color-muted);
+}
+
+/* ============================================================
+   SKELETON (loading)
+   ============================================================ */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-border) 37%,
+    var(--color-surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 250ms var(--ease-flesan-out);
+}
+
+.animate-slide-up {
+  animation: slide-up 280ms var(--ease-flesan-out);
+}
+
+/* ============================================================
+   FIELD INPUTS
+   ============================================================ */
+
+.field-input {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-flesan);
+  color: var(--color-text);
+  padding: calc(var(--densidad-celda-y) + 0.125rem) var(--densidad-celda-x);
+  font-family: var(--font-body);
+  font-size: calc(var(--densidad-texto) + 0.0625rem);
+  line-height: 1.55;
+  outline: none;
+  transition: border-color 150ms var(--ease-flesan-out), box-shadow 150ms var(--ease-flesan-out);
+}
+/* Desplegables nativos: la flecha del navegador queda pegada al borde. Se reemplaza por un
+   chevron propio con aire a la derecha, en todos los <select> de una línea. Los que ya dibujan
+   su propia flecha (appearance: none en línea, como los campos del laboratorio) no se tocan. */
+:root {
+  --select-flecha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6b73' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.dark {
+  --select-flecha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+select:not([multiple]):not([size]):not([style*="appearance"]) {
+  appearance: none;
+  background-image: var(--select-flecha);
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem;
+  padding-right: 2.5rem;
+}
+.field-input::placeholder {
+  color: var(--color-faint);
+}
+.field-input:focus {
+  border-color: var(--color-flesan-red);
+  box-shadow: inset 0 0 0 1px var(--color-flesan-red);
+}
+
+/* ============================================================
+   ESCALA Y DENSIDAD
+   La raíz fluida suave y los tokens de densidad viven arriba (RESET + BASE). Aquí:
+   variantes de raíz que solo usa el laboratorio /ui-kit/escala para comparar, y las
+   utilidades que consumen los tokens de densidad.
+   ============================================================ */
+
+/* Lab · A: fija en 16px (o el default del navegador). */
+html[data-escala="fija"] {
+  font-size: 100%;
+}
+/* Lab · C: la raíz anterior, proporcional al viewport. */
+html[data-escala="anterior"] {
+  font-size: clamp(13px, 1.05vw, 20px);
+}
+
+.dens-card {
+  padding: var(--densidad-card);
+}
+.dens-gap {
+  gap: var(--densidad-gap);
+}
+.dens-control {
+  height: var(--densidad-control);
+  padding-block: 0;
+  padding-inline: 0.75rem;
+  font-size: var(--densidad-texto);
+}
+textarea.dens-control {
+  height: auto;
+  padding-block: 0.5rem;
+}
+.dens-tabla th,
+.dens-tabla td {
+  padding: var(--densidad-celda-y) var(--densidad-celda-x);
+  font-size: var(--densidad-texto);
+  line-height: 1.4;
+}
+.dens-tabla th {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+/* Estilo de reportería: Inter Tight con cifras tabulares, tomado del panel de
+   colaboradores de automatizacion-debida-diligencia. Se activa con
+   data-estilo="reporte" sobre el cuerpo del reporte (KPIs, tablas, gráficos, filtros).
+   El marco de la plataforma, los títulos de página y los botones siguen en Barlow:
+   ahí vive la marca. Excepción explícita a la guía (que pide Barlow Semi Condensed
+   para datos), aprobada para reportería. Sin degradados: la identidad es plana, con una
+   única excepción aprobada, el brillo rojo de la tarjeta principal (.rep-destacada). */
+[data-estilo="reporte"] {
+  --font-body: var(--font-inter-tight), var(--font-barlow), "Segoe UI", sans-serif;
+  --font-label: var(--font-body);
+  font-family: var(--font-body);
+  font-feature-settings: "tnum" 1, "cv11" 1, "ss01" 1;
+}
+
+/* Cifras rectas, no itálicas: la itálica condensada es para titular, no para leer montos. */
+[data-estilo="reporte"] .display-title {
+  font-family: var(--font-body);
+  font-style: normal;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+[data-estilo="reporte"] .label-eyebrow,
+[data-estilo="reporte"] .label-meta,
+[data-estilo="reporte"] .dens-tabla th {
+  letter-spacing: 0.12em;
+}
+
+[data-estilo="reporte"] .card {
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -24px rgba(20, 20, 40, 0.25);
+}
+.dark [data-estilo="reporte"] .card {
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8);
+}
+
+/* Filtros como píldora; la opción activa lleva un punto rojo (el rojo marca selección). */
+[data-estilo="reporte"] .chip-flesan {
+  border-radius: 999px;
+  padding: 0.4375rem 1rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-estilo="reporte"] .chip-flesan.is-active::before {
+  content: "";
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--color-flesan-red);
+}
+
+/* Los botones son marca: vuelven a Barlow Semi Condensed. */
+[data-estilo="reporte"] .btn-flesan {
+  font-family: var(--font-barlow-semi), "Arial", sans-serif;
+  font-feature-settings: normal;
+}
+
+/* ---- Piezas del Reporte Tipo 1 (components/reporte/) ---- */
+
+/* Tarjeta principal: brillo rojo desde la esquina (la única excepción a «sin degradados»). */
+.rep-destacada {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--color-flesan-red) 10%, transparent) 0%, transparent 62%),
+    var(--color-surface);
+}
+.dark .rep-destacada {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--color-flesan-red) 22%, transparent) 0%, color-mix(in srgb, var(--color-flesan-red) 5%, transparent) 38%, transparent 70%),
+    var(--color-surface);
+}
+
+/* Cifras grandes: apretadas y tabulares. */
+.rep-cifra {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+/* Fila que filtra al hacer clic (leyenda de dona, nivel de pirámide): atenúa lo no elegido. */
+.rep-filtrable {
+  transition: opacity 160ms var(--ease-flesan-out), background-color 160ms var(--ease-flesan-out);
+}
+.rep-filtrable[data-atenuado] {
+  opacity: 0.38;
+}
+.rep-filtrable:hover {
+  background: var(--color-surface-2);
+}
+.rep-filtrable:focus-visible {
+  outline: 2px solid var(--color-flesan-red);
+  outline-offset: 1px;
+}
+
+/* Grilla de fondo de las barras por año: cuatro líneas horizontales. */
+.rep-grilla {
+  background-image: linear-gradient(var(--color-border) 1px, transparent 1px);
+  background-size: 100% 25%;
+}
+
+/* Tabla del reporte: encabezado en mayúsculas espaciadas, filas con separador suave. */
+.rep-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.rep-tabla th {
+  padding: 0.75rem 0.875rem;
+  text-align: left;
+  font-size: 0.65625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.rep-tabla td {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.rep-tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+.rep-tabla tbody tr:hover td {
+  background: var(--color-surface-2);
+}
+.rep-tabla th[aria-sort] button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.rep-tabla th[aria-sort="descending"],
+.rep-tabla th[aria-sort="ascending"] {
+  color: var(--color-text);
+}
+
+/* Respeta reduce-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   AVISOS (franja sobre la barra superior, components/avisos.tsx)
+   ============================================================ */
+.aviso-atencion {
+  background: #fdf3e3;
+  border-color: #f3d6a8;
+  color: #7c3a06;
+}
+.aviso-critico {
+  background: #fdecec;
+  border-color: #f5c2c5;
+  color: #8f0a12;
+}
+.dark .aviso-atencion {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fcd34d;
+}
+.dark .aviso-critico {
+  background: rgba(227, 6, 19, 0.14);
+  border-color: rgba(227, 6, 19, 0.4);
+  color: #fca5a5;
+}
+
+/* Estado de una fuente en Configuración › Fuentes de datos (mismos colores que el indicador). */
+.fuente-al-dia {
+  border-color: var(--color-status-ok);
+  color: #15803d;
+}
+.fuente-atrasada {
+  border-color: #f3d6a8;
+  background: #fdf3e3;
+  color: #b45309;
+}
+.dark .fuente-al-dia {
+  color: #4ade80;
+}
+.dark .fuente-atrasada {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+/* ============================================================
+   ESTADO DE LOS DATOS (barra superior)
+   Píldora con punto de frescura: verde «al día», ámbar «atrasado», gris latiendo mientras
+   actualiza. Los colores de estado solo marcan estado, nunca acento.
+   ============================================================ */
+.estado-datos {
+  --ed-ok: var(--color-status-ok);
+  --ed-ok-halo: rgba(22, 163, 74, 0.18);
+  --ed-atraso: #b45309;
+  --ed-atraso-fondo: #fdf3e3;
+  --ed-atraso-borde: #f3d6a8;
+}
+.dark .estado-datos {
+  --ed-ok: #4ade80;
+  --ed-ok-halo: rgba(74, 222, 128, 0.2);
+  --ed-atraso: #fbbf24;
+  --ed-atraso-fondo: rgba(251, 191, 36, 0.1);
+  --ed-atraso-borde: rgba(251, 191, 36, 0.35);
+}
+.estado-datos-pildora {
+  border-color: var(--color-border);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.estado-datos-suave {
+  color: var(--color-muted);
+}
+.estado-datos-punto {
+  background: var(--ed-ok);
+  box-shadow: 0 0 0 3px var(--ed-ok-halo);
+}
+.estado-datos-punto.is-actualizando {
+  background: var(--color-faint);
+  box-shadow: none;
+  animation: estado-datos-late 1.2s ease-in-out infinite;
+}
+.estado-datos-boton {
+  border-color: var(--color-border);
+  color: var(--color-muted);
+}
+.estado-datos-boton:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+.estado-datos.is-atrasado .estado-datos-pildora {
+  background: var(--ed-atraso-fondo);
+  border-color: var(--ed-atraso-borde);
+  color: var(--ed-atraso);
+}
+.estado-datos.is-atrasado .estado-datos-punto {
+  background: var(--ed-atraso);
+  box-shadow: 0 0 0 3px var(--ed-atraso-borde);
+}
+.estado-datos.is-atrasado .estado-datos-boton {
+  border-color: var(--ed-atraso-borde);
+  color: var(--ed-atraso);
+}
+@keyframes estado-datos-late {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ============================================================
+   ACCESO A PORTALES (CIA / SAP) — components/portales/acceso.tsx
+   Cuatro estilos que el usuario elige en «Personalizar»: lengüeta, media luna, cinta y burbuja.
+   Todos en tonos pastel (fondo suave, color de marca solo en los logos) y con el mismo panel.
+   ============================================================ */
+.acceso-portales {
+  --portales-fondo-cia: #fbe3e4;
+  --portales-fondo-sap: #e1ecf8;
+  --portales-cia: #c8232c;
+  --portales-sap: #2f6fb5;
+  --portales-sap-texto: #ffffff;
+  transition:
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dark .acceso-portales {
+  --portales-fondo-cia: #3a2225;
+  --portales-fondo-sap: #1f2c3d;
+  --portales-cia: #f08a8f;
+  --portales-sap: #8db8e8;
+  --portales-sap-texto: #1f2c3d;
+}
+.acceso-portales:hover,
+.acceso-portales:focus-visible,
+.acceso-portales[aria-expanded="true"] {
+  box-shadow: 4px 6px 14px -8px rgba(0, 0, 0, 0.45);
+  filter: brightness(0.97) saturate(1.15);
+}
+/* Lengüeta: mitad CIA arriba, SAP abajo */
+.lengueta-portales {
+  background: linear-gradient(180deg, var(--portales-fondo-cia) 50%, var(--portales-fondo-sap) 50%);
+}
+/* Media luna: el degradado mide lo que la píldora abierta; en reposo asoma el lado CIA */
+.media-luna-portales {
+  background: linear-gradient(115deg, var(--portales-fondo-cia) 39%, var(--portales-fondo-sap) 39%) left center /
+    5.25rem 100% no-repeat;
+}
+/* Reposo: carrusel CIA → SAP cada 3 s (logo que sube y fondo que cambia de tono). Con el mouse
+   encima, al llegar con Tab o abierta, se ve la píldora «CIA / SAP» sobre el degradado. */
+.media-luna-portales .ml-fondo {
+  animation: ml-fondo 6s ease-in-out infinite;
+  transition: opacity 0.15s ease;
+}
+.media-luna-portales .ml-reposo {
+  transition: opacity 0.15s ease;
+}
+.media-luna-portales .ml-cia {
+  animation: ml-cia 6s ease-in-out infinite;
+}
+.media-luna-portales .ml-sap {
+  animation: ml-sap 6s ease-in-out infinite;
+}
+.media-luna-portales .ml-abierta {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.media-luna-portales:hover .ml-fondo,
+.media-luna-portales:hover .ml-reposo,
+.media-luna-portales:focus-visible .ml-fondo,
+.media-luna-portales:focus-visible .ml-reposo,
+.media-luna-portales[aria-expanded="true"] .ml-fondo,
+.media-luna-portales[aria-expanded="true"] .ml-reposo {
+  opacity: 0;
+}
+.media-luna-portales:hover .ml-abierta,
+.media-luna-portales:focus-visible .ml-abierta,
+.media-luna-portales[aria-expanded="true"] .ml-abierta {
+  opacity: 1;
+}
+@keyframes ml-fondo {
+  0%,
+  40%,
+  100% {
+    background-color: var(--portales-fondo-cia);
+  }
+  50%,
+  90% {
+    background-color: var(--portales-fondo-sap);
+  }
+}
+@keyframes ml-cia {
+  0%,
+  40% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50%,
+  89.99% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+  90% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes ml-sap {
+  0%,
+  40% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  50%,
+  90% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+}
+/* Cinta: línea de color en el borde y rótulo que se vuelve cinta al pasar el mouse */
+.cinta-portales,
+.cinta-portales:hover,
+.cinta-portales:focus-visible,
+.cinta-portales[aria-expanded="true"] {
+  box-shadow: none;
+  filter: none;
+}
+.cinta-portales-linea {
+  background: linear-gradient(180deg, var(--portales-cia) 50%, var(--portales-sap) 50%);
+}
+.cinta-portales-rotulo {
+  width: 1.25rem;
+  transition:
+    width 0.2s ease,
+    background 0.2s ease;
+}
+.cinta-portales:hover .cinta-portales-rotulo,
+.cinta-portales:focus-visible .cinta-portales-rotulo,
+.cinta-portales.is-abierta .cinta-portales-rotulo {
+  width: 1.625rem;
+  background: linear-gradient(180deg, var(--portales-fondo-cia) 50%, var(--portales-fondo-sap) 50%);
+  box-shadow: 4px 6px 14px -8px rgba(0, 0, 0, 0.35);
+}
+/* Burbuja: corte diagonal CIA / SAP y un halo que respira */
+.burbuja-portales {
+  background: linear-gradient(130deg, var(--portales-fondo-cia) 50%, var(--portales-fondo-sap) 50%);
+  border: 1px solid var(--color-border-strong);
+  animation: latido-portales 3s ease-in-out infinite;
+}
+.burbuja-portales:hover {
+  animation-duration: 1.6s;
+}
+@keyframes latido-portales {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(200, 35, 44, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(47, 111, 181, 0), 0 0 16px 1px rgba(47, 111, 181, 0.3);
+  }
+}
+.panel-portales {
+  background:
+    radial-gradient(70% 90% at 12% 20%, rgba(227, 6, 19, 0.28), rgba(227, 6, 19, 0.05) 55%, transparent),
+    radial-gradient(70% 90% at 90% 85%, rgba(0, 174, 239, 0.22), rgba(0, 174, 239, 0.04) 55%, transparent),
+    #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.7);
+  animation: entrar-portales 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Desplegable que sale hacia arriba (media luna): entra subiendo. */
+.panel-portales-arriba {
+  animation-name: entrar-portales-arriba;
+}
+@keyframes entrar-portales-arriba {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes entrar-portales {
+  /* Solo X y escala en transform: el centrado vertical va en la propiedad translate. */
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acceso-portales,
+  .cinta-portales-rotulo,
+  .panel-portales,
+  .estado-datos-punto {
+    animation: none;
+    transition: none;
+  }
+  /* Media luna sin carrusel: queda fijo el logo del Portal CIA. */
+  .media-luna-portales .ml-fondo,
+  .media-luna-portales .ml-cia,
+  .media-luna-portales .ml-sap {
+    animation: none;
+  }
+  .media-luna-portales .ml-fondo {
+    background-color: var(--portales-fondo-cia);
+  }
+  .media-luna-portales .ml-sap {
+    opacity: 0;
+  }
+}

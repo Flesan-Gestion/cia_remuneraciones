@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "./shell.css";
+
+/* ============================================================
+   PLATAFORMA · estilos propios de esta plataforma (este archivo sí se edita en cada una).
+   Todo lo común vive en app/shell.css.
+   ============================================================ */
+
+/* ============================================================
+   MODO DIAPOSITIVA (presentaciones: ?diapositiva=1)
+   El marco pone su propio título; se ocultan el encabezado de la vista y lo marcado como
+   no imprimible. Con un solo bloque (data-bloque), se oculta todo lo que no sea ese bloque
+   o su camino, y el bloque ocupa todo el ancho.
+   ============================================================ */
+[data-diapositiva-marco] [data-page-header],
+[data-diapositiva-marco] [data-no-diapositiva] {
+  display: none !important;
+}
+/* Sin animaciones de entrada: la captura (html-to-image) clona la vista y la animación vuelve
+   a partir desde opacity 0, así que el contenido saldría en blanco. */
+[data-diapositiva-marco] *,
+[data-diapositiva-marco] *::before,
+[data-diapositiva-marco] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+[data-modo-bloque]
+  [data-diapositiva-contenido]
+  *:not([data-camino-bloque]):not([data-bloque-objetivo]):not([data-bloque-objetivo] *) {
+  display: none !important;
+}
+[data-modo-bloque] [data-camino-bloque] {
+  grid-template-columns: minmax(0, 1fr) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+[data-modo-bloque] [data-bloque-objetivo] {
+  grid-column: 1 / -1 !important;
+}

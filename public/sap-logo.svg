@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 198" role="img" aria-label="SAP">
+  <title>SAP</title>
+  <linearGradient id="sapAzul" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#00AEEF"/>
+    <stop offset=".212" stop-color="#0097DC"/>
+    <stop offset=".519" stop-color="#007CC5"/>
+    <stop offset=".792" stop-color="#006CB8"/>
+    <stop offset="1" stop-color="#0066B3"/>
+  </linearGradient>
+  <path fill="url(#sapAzul)" d="M0 198V0h400L202 198z"/>
+  <text x="24" y="134" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-weight="bold"
+        font-size="110" style="letter-spacing:-2px">SAP</text>
+</svg>
