@@ -46,3 +46,6 @@ next-env.d.ts
 !.env.example
 *.pyc
 __pycache__/
+
+# Salida de las pruebas de verificación (Excel, JSON)
+/scripts/verificacion/salida/

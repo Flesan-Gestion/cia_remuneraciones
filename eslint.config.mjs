@@ -10,6 +10,8 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // Build, librerías copiadas y scripts de verificación en CommonJS (scripts/verificacion/README.md).
+  { ignores: ["next-env.d.ts", ".next/**", "public/lab/**", "scripts/verificacion/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

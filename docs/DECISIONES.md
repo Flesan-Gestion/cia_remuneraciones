@@ -148,6 +148,10 @@ filas, el aviso «Sin resultados» en vez de un Excel vacío.
   Centros de Costos» del PHP: asignar a una persona como encargado (columna correo) o visitador
   (reemplaza al anterior) o agregarla a la lista de GGO, o quitarla. ver_planta, administrador y
   administrativo no se editan (el PHP tampoco). Los PHP siguen con su tabla; ya no se sincronizan.
+- 2026-10-07, decisión del usuario: **la copia es la única fuente.** Ningún proceso vuelve a copiar
+  desde `flesan_rrhh.tabla_encargados_cc` ni escribe en ella; lo que se cambie en el aplicativo
+  antiguo no llega a la plataforma. Toda consulta que nombre la tabla original cruza con la copia
+  (`conEncargados`, o `consultar()` de los libros, que lo hace solo).
 - «Empresas completas» (`usuarios.empresas`) solo aplica a Liquidaciones (perfil Jefatura); no
   cambia los libros.
 - NFG ya no es del grupo: se quitó la marca «Ve NFG». Único cambio de visibilidad aprobado:
