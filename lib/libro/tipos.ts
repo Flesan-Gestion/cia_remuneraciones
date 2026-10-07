@@ -38,6 +38,9 @@ export interface CentroCostoLibro {
 
 export interface EmpresaLibro {
   codigo: string;
+  /** Valor de la opción cuando no basta el código: en finiquitos, Administrador y RRHH eligen código
+   * y nombre de la empresa («CFM_FLESAN MINERIA S.A.»), como el antiguo; se filtra por el código. */
+  clave?: string;
   nombre: string;
   centros: CentroCostoLibro[];
   /** ver_planta de la empresa para el encargado ('x' = solo no planta si no es el visitador). No va al navegador. */

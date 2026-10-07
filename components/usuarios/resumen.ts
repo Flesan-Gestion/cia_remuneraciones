@@ -68,9 +68,19 @@ export const OPCIONES_LIQUIDACIONES: { valor: AccesoLiquidaciones; titulo: strin
 
 export const OPCIONES_LIBROS: { valor: RolLibro | ""; titulo: string; detalle: string }[] = [
   { valor: "administrador", titulo: "Todo", detalle: "Todas las empresas; la razón social es opcional. Rol «Administrador»." },
-  { valor: "rrhh", titulo: "Todo, por razón social", detalle: "Todas las empresas, eligiendo siempre una razón social. Rol «RRHH»." },
+  { valor: "rrhh", titulo: "Todo, por razón social", detalle: "Todas las empresas, eligiendo siempre una razón social (en finiquitos es opcional). Rol «RRHH»." },
   // «Administrador OBRA» se unió a este rol el 2026-10-06 (veían lo mismo); el valor sigue siendo válido.
-  { valor: "administrativo_rrhh", titulo: "Sus centros", detalle: "Los centros donde es encargado o visitador. Roles «Administrativo RRHH» y «Administrador OBRA» del aplicativo antiguo." },
-  { valor: "ggo", titulo: "Costo empresa", detalle: "Solo el costo empresa de los centros donde es GGO. Rol «GGO»." },
+  {
+    valor: "administrativo_rrhh",
+    titulo: "Sus centros",
+    detalle:
+      "Los centros donde es encargado o visitador; sin el libro prorrateado, como en el aplicativo antiguo. Roles «Administrativo RRHH» y «Administrador OBRA» del aplicativo antiguo.",
+  },
+  {
+    valor: "ggo",
+    titulo: "Costo empresa",
+    detalle:
+      "Solo el costo empresa de los centros donde es GGO; en el libro prorrateado, todos los conceptos de esos centros. Sin finiquitos, como en el aplicativo antiguo. Rol «GGO».",
+  },
   { valor: "", titulo: "Ninguno", detalle: "No entra a los libros ni a finiquitos." },
 ];

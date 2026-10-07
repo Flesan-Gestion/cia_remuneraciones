@@ -8,6 +8,7 @@ import { descargarExcel } from "@/lib/exportar/excel";
 import { Desplegable } from "@/components/desplegable";
 import { normalizar, periodoLegible } from "@/lib/liquidaciones/formato";
 import { etiquetaRolLibro, type RolLibro } from "@/lib/libro/tipos";
+import { rangoSemanas } from "@/lib/finiquitos/tipos";
 import type { EventoActividad } from "@/lib/actividad-db";
 import { fetcher, Nota, Paginacion } from "@/components/liquidaciones/ui";
 
@@ -55,10 +56,16 @@ function resumen(e: EventoActividad): string {
       const libros = "rol_remuneraciones" in d ? `, libros ${d.rol_remuneraciones ? etiquetaRolLibro(d.rol_remuneraciones as RolLibro) : "sin acceso"}` : "";
       return `${e.entidad_id}: rol ${d.rol}, perfil ${d.perfil}${Array.isArray(d.empresas) && d.empresas.length ? `, empresas ${d.empresas.join(", ")}` : ""}${libros}`;
     }
-    case "Descargó el libro de remuneraciones": {
+    case "Descargó el libro de remuneraciones":
+    case "Descargó el libro prorrateado":
+    case "Descargó los finiquitos": {
       const f = (d.filtros ?? {}) as { empresa?: string | null; cc?: string | null; desde?: string; hasta?: string };
-      const meses = f.desde && f.hasta ? (f.desde === f.hasta ? periodoLegible(f.desde) : `${periodoLegible(f.desde)} a ${periodoLegible(f.hasta)}`) : "";
-      return `${d.filas} filas, ${d.personas} personas · ${meses}${f.empresa ? ` · ${f.empresa}` : " · todas las empresas"}${f.cc ? ` · CC ${f.cc}` : ""}`;
+      const rango =
+        e.accion === "Descargó los finiquitos"
+          ? rangoSemanas
+          : (desde: string, hasta: string) => (desde === hasta ? periodoLegible(desde) : `${periodoLegible(desde)} a ${periodoLegible(hasta)}`);
+      const periodos = f.desde && f.hasta ? rango(f.desde, f.hasta) : "";
+      return `${d.filas} filas, ${d.personas} personas · ${periodos}${f.empresa ? ` · ${f.empresa}` : " · todas las empresas"}${f.cc ? ` · CC ${f.cc}` : ""}`;
     }
     case "Cambió la programación":
       return `Día ${d.dia_mes}, ${d.activo ? "activo" : "inactivo"}`;

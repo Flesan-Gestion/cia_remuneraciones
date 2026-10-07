@@ -5,6 +5,8 @@ import { UserProvider } from "@/components/user-context";
 import { SwrProvider } from "@/components/swr-provider";
 import { resolverAcceso } from "@/lib/liquidaciones/acceso";
 import { resolverAccesoLibro } from "@/lib/libro/acceso";
+import { veProrrateado } from "@/lib/libro-prorrateado/tipos";
+import { veFiniquitos } from "@/lib/finiquitos/tipos";
 import { perfilMenu } from "@/lib/nav";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -18,7 +20,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         email: session.user.email,
         image: session.user.image,
         role: session.user.role,
-        perfil: acceso ? perfilMenu(acceso.perfil, Boolean(accesoLibro?.rol)) : null,
+        perfil: acceso
+          ? perfilMenu(acceso.perfil, Boolean(accesoLibro?.rol), Boolean(accesoLibro && veProrrateado(accesoLibro)), Boolean(accesoLibro && veFiniquitos(accesoLibro)))
+          : null,
       }
     : null;
 

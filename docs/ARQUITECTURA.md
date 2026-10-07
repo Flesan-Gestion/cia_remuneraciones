@@ -7,8 +7,9 @@ antiguos está en [`DECISIONES.md`](DECISIONES.md).
 ## Modelo de datos
 
 **Lectura** (`DATABASE_URL`, `lib/db.ts`, base `flesan` del DW): las tablas de RR.HH. que usaban
-`liquidaciones_sap_g2` y `libro_rem_g2`. Las consultas están en `lib/liquidaciones/consultas.ts` y
-`lib/libro/consultas.ts`, portadas desde el PHP con las mismas reglas. La tabla de liquidaciones
+`liquidaciones_sap_g2`, `libro_rem_g2`, `libro_rem_dis` y `finiquito_rem`. Las consultas están en
+`lib/liquidaciones/consultas.ts`, `lib/libro/consultas.ts`, `lib/libro-prorrateado/consultas.ts` y
+`lib/finiquitos/consultas.ts`, portadas desde el PHP con las mismas reglas. La tabla de liquidaciones
 (~5 millones de filas) no tiene índices y la base es Postgres 10: el detalle se pide en lote, con
 `WITH` (Postgres 10 los calcula una vez) y `enable_nestloop = off` solo en esa transacción, porque
 el planificador subestima los `WITH`. La consulta del libro además sube `work_mem` a 32 MB en su
@@ -90,6 +91,10 @@ login CIA):
 | `/api/configuracion/actividad` | GET | `adminOnly` — registro de actividad. |
 | `/api/libro/filtros` | GET | Rol en los libros, empresas y CC que puede elegir, y periodos. |
 | `/api/libro/excel` | POST | Excel del libro; calcula el alcance del rol en el servidor y registra la descarga. |
+| `/api/libro-prorrateado/filtros` | GET | Lo mismo para el libro prorrateado. |
+| `/api/libro-prorrateado/excel` | POST | Excel del libro prorrateado; registra la descarga. |
+| `/api/finiquitos/filtros` | GET | Rol, empresas y CC que puede elegir, semanas de pago y si se muestran los filtros. |
+| `/api/finiquitos/excel` | POST | Excel de finiquitos (tres hojas); calcula el alcance del rol en el servidor y registra la descarga. |
 
 ## Perfiles de acceso a las liquidaciones
 
@@ -103,10 +108,12 @@ a validar. En desarrollo, `DEV_EMAIL` y `DEV_PERFIL` simulan a una persona (solo
 
 `lib/libro/acceso.ts` lee `usuarios.rol_remuneraciones` y `usuarios.ve_nfg`: los cinco roles de
 los aplicativos antiguos (`lib/libro/tipos.ts`), independientes del perfil de liquidaciones. Sin
-fila o sin rol: sin acceso. Sirve para el libro de remuneraciones y servirá para el libro
-prorrateado y finiquitos, que usaban la misma tabla de roles. El menú filtra con un solo texto de
-perfil: el layout le pasa `perfilMenu()` (`lib/nav.ts`), el perfil de liquidaciones más
-«+libros» si tiene rol. En desarrollo, `DEV_ROL_LIBRO` simula un rol (solo con `AUTH_DISABLED=true`).
+fila o sin rol: sin acceso. Sirve para el libro de remuneraciones, el prorrateado y finiquitos, que
+usaban la misma tabla de roles; los dos últimos dejan fuera a quien el antiguo nunca les servía
+(`veProrrateado` en `lib/libro-prorrateado/tipos.ts`, `veFiniquitos` en `lib/finiquitos/tipos.ts`).
+El menú filtra con un solo texto de perfil: el layout le pasa `perfilMenu()` (`lib/nav.ts`), el
+perfil de liquidaciones más «+libros» si tiene rol, «+prorrateado» y «+finiquitos». En desarrollo,
+`DEV_ROL_LIBRO` simula un rol (solo con `AUTH_DISABLED=true`).
 
 ## Libro de remuneraciones
 
@@ -121,12 +128,22 @@ orden del Excel antiguo) y `lib/libro/excel.ts` (el Excel).
    cruza con el maestro y se agrupa con las mismas columnas del original (y en el mismo orden).
 4. Tres variantes, como el PHP: Administrador (todo), GGO (solo costo empresa) y el resto (RRHH
    sin NFG; encargados con su filtro de CC, no planta y NFG).
-5. El Excel lo escribe `lib/exportar/xlsx-servidor.ts`: un .xlsx mínimo (una hoja, logo, cinco
-   estilos) que se comprime a medida que se escriben las filas. ExcelJS en memoria necesitaba
+5. El Excel lo escribe `lib/exportar/xlsx-servidor.ts`: un .xlsx mínimo (una o varias hojas, logo,
+   seis estilos) que se comprime a medida que se escriben las filas. ExcelJS en memoria necesitaba
    ~2 GB para un libro de 15.000 filas; así son ~40 MB.
 
 La lista de empresas y CC de Administrador y RRHH recorre la tabla de liquidaciones completa: se
 guarda una hora en memoria, igual que los periodos (compartidos con liquidaciones).
+
+## Finiquitos
+
+`lib/finiquitos/consultas.ts` (consultas), `lib/finiquitos/conceptos.ts` (columnas de las tres hojas,
+en el orden del Excel antiguo), `lib/finiquitos/excel.ts` (el Excel) y `lib/finiquitos/tipos.ts`
+(quién entra y las semanas legibles). La tabla `sap_finiquito_grupo_flesan_g2` es chica (una fila por
+concepto, persona y semana de pago), así que las tres hojas son tres consultas con las expresiones
+del original, que corren a la vez: el detalle, el resumen por persona y el resumen por obra. El costo
+empresa y el imponible se calculan solo para los meses elegidos. Las semanas del filtro son
+«AAAAMMSemana N», como las armaba el antiguo, y se comparan como texto.
 
 ## Envío por correo
 

@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenText, Clock, FileSignature, FileText, Lock, Send, SplitSquareHorizontal, type LucideIcon } from "lucide-react";
+import { ArrowRight, BookOpenText, FileSignature, FileText, Lock, Send, SplitSquareHorizontal, type LucideIcon } from "lucide-react";
 import { auth } from "@/auth";
 import { cn } from "@/lib/cn";
 import { resolverAcceso } from "@/lib/liquidaciones/acceso";
 import { resolverAccesoLibro } from "@/lib/libro/acceso";
 import { etiquetaRolLibro } from "@/lib/libro/tipos";
+import { veProrrateado } from "@/lib/libro-prorrateado/tipos";
+import { veFiniquitos } from "@/lib/finiquitos/tipos";
 
-type Estado = "disponible" | "sin_acceso" | "proximamente";
+type Estado = "disponible" | "sin_acceso";
 
 interface Modulo {
   href: string;
@@ -23,8 +25,7 @@ interface Modulo {
 
 /**
  * Inicio: los cuatro aplicativos de remuneraciones de RR.HH. en un solo lugar. Cada tarjeta dice
- * si la persona puede entrar (según su perfil de liquidaciones o su rol en los libros) o si el
- * módulo todavía está en el aplicativo antiguo.
+ * si la persona puede entrar, según su perfil de liquidaciones o su rol en los libros y finiquitos.
  */
 export default async function HomePage() {
   const session = await auth();
@@ -32,6 +33,8 @@ export default async function HomePage() {
   const [acceso, accesoLibro] = correo ? await Promise.all([resolverAcceso(correo), resolverAccesoLibro(correo)]) : [null, null];
   const perfil = acceso?.perfil ?? "sin_acceso";
   const rolLibro = accesoLibro?.rol ?? null;
+  const prorrateado = Boolean(accesoLibro && veProrrateado(accesoLibro));
+  const finiquitos = Boolean(accesoLibro && veFiniquitos(accesoLibro));
   const nombre = session?.user?.name?.split(/\s+/)[0];
 
   const modulos: Modulo[] = [
@@ -55,20 +58,22 @@ export default async function HomePage() {
       acceso: rolLibro ? `Rol ${etiquetaRolLibro(rolLibro)}` : undefined,
     },
     {
-      href: "#",
+      href: "/libro-prorrateado",
       titulo: "Libro de remuneraciones prorrateado",
       descripcion: "El libro de remuneraciones con cada persona repartida entre centros de costo según su distribución en SAP.",
-      puntos: ["Montos según el porcentaje de cada centro de costo"],
+      puntos: ["Montos según el porcentaje de cada centro de costo", "Uno o varios meses en un solo archivo"],
       icon: SplitSquareHorizontal,
-      estado: "proximamente",
+      estado: prorrateado ? "disponible" : "sin_acceso",
+      acceso: prorrateado && rolLibro ? `Rol ${etiquetaRolLibro(rolLibro)}` : undefined,
     },
     {
-      href: "#",
+      href: "/finiquitos",
       titulo: "Finiquitos",
-      descripcion: "Libro de finiquitos de SAP por razón social, centro de costo y periodo.",
-      puntos: [],
+      descripcion: "Libro de finiquitos de SAP por razón social, centro de costo y semana de pago.",
+      puntos: ["Detalle con cada concepto, resumen por persona y por obra", "Una o varias semanas de pago en un solo archivo"],
       icon: FileSignature,
-      estado: "proximamente",
+      estado: finiquitos ? "disponible" : "sin_acceso",
+      acceso: finiquitos && rolLibro ? `Rol ${etiquetaRolLibro(rolLibro)}` : undefined,
     },
   ];
 
@@ -102,7 +107,6 @@ export default async function HomePage() {
 const ETIQUETA: Record<Estado, { texto: string; clase: string; icon: LucideIcon | null }> = {
   disponible: { texto: "Disponible", clase: "border-status-ok/40 text-status-ok bg-status-ok/10", icon: null },
   sin_acceso: { texto: "Sin acceso", clase: "", icon: Lock },
-  proximamente: { texto: "Próximamente", clase: "", icon: Clock },
 };
 
 function TarjetaModulo({ modulo: m }: { modulo: Modulo }) {
@@ -145,7 +149,7 @@ function TarjetaModulo({ modulo: m }: { modulo: Modulo }) {
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" aria-hidden />
           </span>
         ) : (
-          <span className="text-faint font-normal">{m.estado === "sin_acceso" ? "Si lo necesitas para tu trabajo, pídelo a RR.HH." : "Por ahora sigue en el aplicativo antiguo."}</span>
+          <span className="text-faint font-normal">Si lo necesitas para tu trabajo, pídelo a RR.HH.</span>
         )}
       </div>
     </>

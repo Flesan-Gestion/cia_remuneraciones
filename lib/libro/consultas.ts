@@ -27,26 +27,35 @@ const CODIGOS_IMPONIBLE = [
 /** El original no cuenta en el costo empresa del GGO estos CC (préstamos, colectas, devoluciones). */
 const EXCLUIDOS_COSTO_GGO = ["1041", "1006", "1022", "1023", "1021", "/IF2"];
 
-/** El código del CC OYM0000755501 no calza con el de las liquidaciones (excepción del original). */
-function codigoCc(cc: string) {
+/** El código del CC OYM0000755501 no calza con el de las liquidaciones (excepción del original,
+ * también en el libro prorrateado). */
+export function codigoCc(cc: string) {
   return cc === "OYM0000755501" ? "OYM755501" : cc;
 }
 
-/** Todo en una transacción de solo lectura. En la consulta del libro (`pesada`): Postgres 10
- * estima mal las filas de un WITH y elegiría ciclos anidados, y con el work_mem de la base
- * (1,5 MB) ordenaría en disco; se le piden cruces por hash y más memoria solo en esa transacción. */
-async function consultar<T extends QueryResultRow>(sqlOriginal: string, paramsOriginales: unknown[], pesada = false): Promise<T[]> {
+/**
+ * Ajustes de la transacción: «pesada» para la consulta del libro (Postgres 10 estima mal las filas
+ * de un WITH y elegiría ciclos anidados, y con el work_mem de la base, 1,5 MB, ordenaría en disco:
+ * cruces por hash y más memoria) y «memoria» solo para más memoria (libro prorrateado, que sí
+ * aprovecha los ciclos anidados por el índice de np_cc_nuevo).
+ */
+export type AjusteConsulta = "pesada" | "memoria";
+
+const AJUSTES: Record<AjusteConsulta, string[]> = {
+  pesada: ["SET LOCAL enable_nestloop = off", "SET LOCAL work_mem = '32MB'"],
+  memoria: ["SET LOCAL work_mem = '32MB'"],
+};
+
+/** Todo en una transacción de solo lectura; los ajustes van solo en ella. */
+export async function consultar<T extends QueryResultRow>(sqlOriginal: string, paramsOriginales: unknown[], ajuste?: AjusteConsulta): Promise<T[]> {
   // Las consultas nombran flesan_rrhh.tabla_encargados_cc como el original; cruzan con su copia
   // del esquema propio (db/006), con las mismas filas.
   const params = [...paramsOriginales];
   const sql = sqlOriginal.includes("flesan_rrhh.tabla_encargados_cc") ? conEncargados(sqlOriginal, params, await leerEncargados()) : sqlOriginal;
   const cliente = await pool.connect();
   try {
-    await cliente.query("BEGIN READ ONLY");
-    if (pesada) {
-      await cliente.query("SET LOCAL enable_nestloop = off");
-      await cliente.query("SET LOCAL work_mem = '32MB'");
-    }
+    // Una sola ida a la base para abrir la transacción y aplicar los ajustes.
+    await cliente.query(["BEGIN READ ONLY", ...(ajuste ? AJUSTES[ajuste] : [])].join("; "));
     // Como pg_fetch_assoc de PHP: todo llega como texto (también un booleano: «t» / «f») y se
     // convierte al armar el Excel.
     const { rows } = await cliente.query<T>({ text: sql, values: params, types: { getTypeParser: () => (v: string) => v } });
@@ -62,7 +71,7 @@ async function consultar<T extends QueryResultRow>(sqlOriginal: string, paramsOr
 
 // ---------------------------------------------------------------- empresas y CC del filtro
 
-interface FilaCentro {
+export interface FilaCentro {
   external_code_empresa: string | null;
   nombre_empresa: string | null;
   external_code_cc: string | null;
@@ -72,7 +81,7 @@ interface FilaCentro {
 
 /** Agrupa como el PHP: por código de empresa (con trim), CC en el orden de la consulta. El
  * ver_planta de la empresa es el de su última fila (el PHP lo sobrescribía en cada CC). */
-function agrupar(filas: FilaCentro[]): EmpresaLibro[] {
+export function agrupar(filas: FilaCentro[]): EmpresaLibro[] {
   const porCodigo = new Map<string, EmpresaLibro>();
   for (const f of filas) {
     const codigo = (f.external_code_empresa ?? "").trim();
@@ -125,11 +134,17 @@ async function empresasConLiquidaciones(): Promise<EmpresaLibro[]> {
      GROUP BY 1, 2, 3, 4
      ORDER BY n.nombre_empresa, c.nombre_centro_costo`,
     [],
-    true,
+    "pesada",
   );
   const valor = agrupar(filas);
   globalThis._empresasLibro = { valor, en: Date.now() };
   return valor;
+}
+
+/** Si el correo figura como GGO en algún centro (ggo() del original: correo_ggo like '%correo%'). */
+export async function esGgo(correo: string): Promise<boolean> {
+  const filas = await consultar(`SELECT 1 FROM flesan_rrhh.tabla_encargados_cc WHERE strpos(lower(correo_ggo), $1) > 0 LIMIT 1`, [correo]);
+  return filas.length > 0;
 }
 
 /**
@@ -141,12 +156,8 @@ async function empresasConLiquidaciones(): Promise<EmpresaLibro[]> {
  */
 export async function listarEmpresasLibro(acceso: AccesoLibro): Promise<EmpresaLibro[]> {
   if (acceso.rol === "administrador" || acceso.rol === "rrhh") return empresasConLiquidaciones();
-  const esGgo = await consultar(
-    `SELECT 1 FROM flesan_rrhh.tabla_encargados_cc WHERE strpos(lower(correo_ggo), $1) > 0 LIMIT 1`,
-    [acceso.correo],
-  );
   const LLAVE = "t.llave = (e.external_code_empresa || '-' || e.nombre_empresa || e.external_code_cc || '-' || e.nombre_cc)";
-  if (esGgo.length) {
+  if (await esGgo(acceso.correo)) {
     // Sin ver_planta (el original no lo traía en esta lista).
     return agrupar(
       await consultar<FilaCentro>(
@@ -399,7 +410,7 @@ WHERE EXISTS (
 GROUP BY m.fecha_termino, tc.nombre, m.fecha_fin_contrato, m.fecha_ingreso, l.sociedad, cc, nombre_completo, rut, np, cargo,
   ce.valor, l.mes_pago, t.administrativo, c.planta_noplanta, cg.nombre_clasificacion_gasto
 ORDER BY replace(l.mes_pago, '-', ''), nombre_completo`;
-    return consultar<FilaLibro>(sql, params, true);
+    return consultar<FilaLibro>(sql, params, "pesada");
   }
 
   if (variante === "normal") {
@@ -464,5 +475,5 @@ FROM pre p
 WHERE true${whereMaestro}
 GROUP BY ${agrupacion}
 ORDER BY ${agrupacion}`;
-  return consultar<FilaLibro>(sql, params, true);
+  return consultar<FilaLibro>(sql, params, "pesada");
 }

@@ -30,7 +30,7 @@ type Funcion = "encargado" | "visitador" | "ggo";
 const FUNCIONES: { valor: Funcion; texto: string; detalle: string }[] = [
   { valor: "encargado", texto: "Encargado", detalle: "Ve el centro; reemplaza al encargado actual" },
   { valor: "visitador", texto: "Visitador", detalle: "Ve el centro; reemplaza al visitador actual" },
-  { valor: "ggo", texto: "GGO", detalle: "Solo el libro de costo empresa; se suma a la lista" },
+  { valor: "ggo", texto: "GGO", detalle: "Solo en los libros (costo empresa y prorrateado); se suma a la lista" },
 ];
 const TEXTO_FUNCION: Record<Funcion, string> = { encargado: "Encargado", visitador: "Visitador", ggo: "GGO" };
 
@@ -291,7 +291,8 @@ function CentrosDePersona({ u, nombre, onCambio }: { u: UsuarioAsignado; nombre:
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted">
-        Encargado y visitador ven el centro en Liquidaciones (perfil «Las de sus centros») y en los libros «Sus centros»; GGO, en el libro de costo empresa.
+        Encargado y visitador ven el centro en Liquidaciones (perfil «Las de sus centros») y en el libro de remuneraciones y finiquitos «Sus centros»; GGO, en
+        el libro de costo empresa y en el prorrateado.
       </p>
 
       <label className="relative block">

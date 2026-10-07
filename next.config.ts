@@ -9,7 +9,14 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pdfkit"],
   // Archivos que se leen en tiempo de ejecución y deben ir en la imagen standalone.
   outputFileTracingIncludes: {
-    "/**/*": ["./lib/liquidaciones/fuentes/**/*", "./lib/libro/logo.png", "./node_modules/pdfkit/js/data/**/*", "./maestro_colaborador.sql"],
+    "/**/*": [
+      "./lib/liquidaciones/fuentes/**/*",
+      "./lib/libro/logo.png",
+      "./lib/libro-prorrateado/logo.png",
+      "./lib/finiquitos/logo.png",
+      "./node_modules/pdfkit/js/data/**/*",
+      "./maestro_colaborador.sql",
+    ],
   },
 };
 

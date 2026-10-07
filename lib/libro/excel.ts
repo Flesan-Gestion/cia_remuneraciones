@@ -42,17 +42,41 @@ export function valorComoPhpSpreadsheet(v: string | null | undefined): string | 
 }
 
 /** date("d-m-Y", strtotime($v)) para las fechas AAAA-MM-DD que entrega la base. */
-function fechaComoPhp(v: string) {
+export function fechaComoPhp(v: string) {
   const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : v;
 }
 
+/** Valor de una columna fija, como los Excel antiguos: las fechas con date("d-m-Y", strtotime($v))
+ * salvo vacías o 0000-00-00; el resto, como lo guardaba PhpSpreadsheet. */
+export function valorFijoComoPhp(clave: string, v: string | null | undefined): string | number {
+  if (clave.includes("fecha") && v && v !== "0" && v !== "0000-00-00") return fechaComoPhp(v);
+  return valorComoPhpSpreadsheet(v);
+}
+
+/** La fecha de hoy en Chile, AAAA-MM-DD (los antiguos fijaban la zona Chile/Continental). */
+export function hoyEnChile(ahora: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(ahora);
+}
+
+/**
+ * «Preliminar» en el título mientras la fecha de hace un mes no pasa del día 10 del mes `hasta`
+ * (AAAAMM al inicio): en los antiguos, date('Y-m-d', strtotime('-1 month')) <= 'AAAA-MM-10'.
+ * Ej.: septiembre es preliminar hasta el 10 de octubre.
+ */
+export function esPreliminar(hasta: string, ahora = new Date()) {
+  const [a, m, d] = hoyEnChile(ahora).split("-").map(Number);
+  // strtotime('-1 month'): el mismo día del mes anterior; si no existe, se desborda como en PHP (31 de marzo → 3 de marzo).
+  const haceUnMes = new Date(Date.UTC(a, m - 2, d)).toISOString().slice(0, 10);
+  return haceUnMes <= `${hasta.slice(0, 4)}-${hasta.slice(4, 6)}-10`;
+}
+
 /** Ancho aproximado como el autosize de PhpSpreadsheet (Calibri 11). */
-function ancho(largo: number, negrita = false) {
+export function ancho(largo: number, negrita = false) {
   return Math.min(80, Math.ceil(largo * (negrita ? 1.2 : 1.1)) + 2);
 }
 
-function largoMostrado(v: string | number, conMiles: boolean) {
+export function largoMostrado(v: string | number, conMiles: boolean) {
   if (typeof v !== "number") return v.length;
   return conMiles ? Math.round(v).toLocaleString("es-CL").length : String(v).length;
 }

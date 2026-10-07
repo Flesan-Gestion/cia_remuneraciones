@@ -1,4 +1,4 @@
-import { BookOpenText, FileText, LayoutGrid, Send, Settings } from "lucide-react";
+import { BookOpenText, FileSignature, FileText, LayoutGrid, Send, Settings, SplitSquareHorizontal } from "lucide-react";
 import { crearMigas, type NavItem } from "@/lib/nav-base";
 
 export * from "@/lib/nav-base";
@@ -13,25 +13,32 @@ export * from "@/lib/nav-base";
 export const NOMBRE_PLATAFORMA = { texto: "Remuneraciones", destacado: "SAP" };
 
 /**
- * El menú filtra con un solo texto de perfil (UsuarioActual.perfil). Aquí se juntan los dos
- * accesos de la plataforma: el perfil de liquidaciones (rrhh / jefatura / sin_acceso) y, si tiene
- * rol en los libros y finiquitos, el sufijo «+libros». Ej.: «jefatura+libros».
+ * El menú filtra con un solo texto de perfil (UsuarioActual.perfil). Aquí se juntan los accesos de
+ * la plataforma: el perfil de liquidaciones (rrhh / jefatura / sin_acceso), el sufijo «+libros» si
+ * tiene rol en los libros y finiquitos y, además, «+prorrateado» y «+finiquitos» si ese rol obtiene
+ * el libro prorrateado o los finiquitos (lib/libro-prorrateado/tipos.ts, lib/finiquitos/tipos.ts).
+ * Ej.: «jefatura+libros+prorrateado+finiquitos».
  */
-export function perfilMenu(perfilLiquidaciones: string, conLibros: boolean) {
-  return conLibros ? `${perfilLiquidaciones}+libros` : perfilLiquidaciones;
+export function perfilMenu(perfilLiquidaciones: string, conLibros: boolean, conProrrateado = false, conFiniquitos = false) {
+  return `${perfilLiquidaciones}${conLibros ? "+libros" : ""}${conLibros && conProrrateado ? "+prorrateado" : ""}${conLibros && conFiniquitos ? "+finiquitos" : ""}`;
 }
 
-const conYSinLibros = (perfiles: string[]) => perfiles.flatMap((p) => [p, `${p}+libros`]);
-const CON_LIBROS = ["rrhh", "jefatura", "sin_acceso"].map((p) => `${p}+libros`);
+const PERFILES = ["rrhh", "jefatura", "sin_acceso"];
+const CON_PRORRATEADO = ["+libros+prorrateado", "+libros+prorrateado+finiquitos"];
+const CON_FINIQUITOS = ["+libros+finiquitos", "+libros+prorrateado+finiquitos"];
+const CON_LIBROS = ["+libros", ...CON_PRORRATEADO, "+libros+finiquitos"];
+const conSufijos = (perfiles: string[], sufijos: string[]) => perfiles.flatMap((p) => sufijos.map((s) => `${p}${s}`));
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", icon: LayoutGrid },
   // Perfiles (lib/liquidaciones/tipos.ts): quien no tiene acceso no ve Liquidaciones; el envío
-  // por correo es solo de RR.HH. El libro, para quien tiene rol en los libros
+  // por correo es solo de RR.HH. Los libros, para quien tiene rol en los libros
   // (lib/libro/tipos.ts). Cada ruta valida lo mismo en el servidor.
-  { href: "/liquidaciones", label: "Liquidaciones", icon: FileText, perfiles: conYSinLibros(["rrhh", "jefatura"]) },
-  { href: "/envios", label: "Envío por correo", icon: Send, perfiles: conYSinLibros(["rrhh"]) },
-  { href: "/libro-remuneraciones", label: "Libro de remuneraciones", icon: BookOpenText, perfiles: CON_LIBROS },
+  { href: "/liquidaciones", label: "Liquidaciones", icon: FileText, perfiles: conSufijos(["rrhh", "jefatura"], ["", ...CON_LIBROS]) },
+  { href: "/envios", label: "Envío por correo", icon: Send, perfiles: conSufijos(["rrhh"], ["", ...CON_LIBROS]) },
+  { href: "/libro-remuneraciones", label: "Libro de remuneraciones", icon: BookOpenText, perfiles: conSufijos(PERFILES, CON_LIBROS) },
+  { href: "/libro-prorrateado", label: "Libro prorrateado", icon: SplitSquareHorizontal, perfiles: conSufijos(PERFILES, CON_PRORRATEADO) },
+  { href: "/finiquitos", label: "Finiquitos", icon: FileSignature, perfiles: conSufijos(PERFILES, CON_FINIQUITOS) },
 ];
 
 /** Configuración no va en el menú principal: vive en el pie del sidebar. Está abierta a todos y

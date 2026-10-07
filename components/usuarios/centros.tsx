@@ -205,8 +205,8 @@ export function CentrosCosto({ personas, onCambio }: { personas: { correo: strin
         <Paginacion pagina={pagina} paginas={paginas} onCambio={setPagina} total={filtrados.length} unidad="centros" />
       </div>
       <p className="text-xs text-faint">
-        Para asignar a alguien que no aparece en las listas, agrégalo primero en la pestaña Personas. Encargado y visitador ven el centro en Liquidaciones y en los
-        libros; GGO, solo en el libro de costo empresa.
+        Para asignar a alguien que no aparece en las listas, agrégalo primero en la pestaña Personas. Encargado y visitador ven el centro en Liquidaciones, en el
+        libro de remuneraciones y en finiquitos; GGO, solo en los libros: el de costo empresa y el prorrateado.
       </p>
     </div>
   );
