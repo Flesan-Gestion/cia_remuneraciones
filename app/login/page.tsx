@@ -1,9 +1,10 @@
 import { signIn } from "@/auth";
 import { CiaLogo } from "@/components/cia-logo";
+import { DOMINIOS_PERMITIDOS } from "@/auth.config";
 
 // Auth.js manda errores a esta misma página (pages.error = "/login").
 const ERRORES: Record<string, string> = {
-  AccessDenied: "Tu cuenta no pertenece a un dominio autorizado.",
+  AccessDenied: "Tu cuenta no tiene acceso. Entra con tu correo corporativo; si aún no tienes acceso, pídeselo a un administrador.",
   Configuration: "El login aún no está configurado en el servidor (variables AUTH_*).",
   Verification: "El enlace de acceso expiró. Intentá de nuevo.",
   default: "No se pudo iniciar sesión. Intentá nuevamente.",
@@ -41,9 +42,9 @@ export default async function LoginPage({
         <div className="rounded-2xl border border-white/[0.08] bg-[#161616]/80 p-10 shadow-2xl backdrop-blur-xl">
           {/* Marca — TODO: reemplazar por el logo real de la plataforma (public/brand/) */}
           <div className="flex flex-col items-center text-center">
-            <CiaLogo className="w-14 h-14 mb-5 text-white" />
-            <h1 className="font-display text-3xl font-extrabold italic uppercase tracking-tight text-text leading-none">
-              Remuneraciones SAP
+            <CiaLogo className="w-14 h-14 mb-5 text-flesan-red" />
+            <h1 className="font-display text-3xl font-extrabold italic uppercase tracking-tight text-white leading-none">
+              Remuneraciones <span className="text-flesan-red">G2</span>
             </h1>
             <p className="mt-2 font-label text-[11px] font-semibold uppercase tracking-[0.25em] text-flesan-warm">
               Grupo Flesan
@@ -53,7 +54,7 @@ export default async function LoginPage({
               Ingresa con tu cuenta corporativa de Google
             </p>
             <p className="mt-1 font-body text-xs text-flesan-steel">
-              Dominios autorizados: flesan.cl
+              Dominios autorizados: {DOMINIOS_PERMITIDOS.join(", ")}
             </p>
           </div>
 

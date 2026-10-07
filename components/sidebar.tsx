@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import {
   NAV_CONFIG,
   NAV_ITEMS,
+  NOMBRE_COMPLETO,
   NOMBRE_PLATAFORMA,
   gruposDe,
   menuPara,
@@ -116,7 +117,7 @@ export function Sidebar() {
           <span
             className={cn(
               "font-display font-bold italic uppercase tracking-[0.04em] text-text leading-none whitespace-nowrap flex-1 min-w-0 truncate",
-              `${NOMBRE_PLATAFORMA.texto} ${NOMBRE_PLATAFORMA.destacado}`.trim().length > 18 ? "text-[0.9375rem]" : "text-[1.1875rem]",
+              NOMBRE_COMPLETO.length > 18 ? "text-[0.9375rem]" : "text-[1.1875rem]",
             )}
           >
             {NOMBRE_PLATAFORMA.texto && `${NOMBRE_PLATAFORMA.texto} `}

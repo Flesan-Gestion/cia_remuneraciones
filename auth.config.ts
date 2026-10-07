@@ -19,7 +19,9 @@ export const authConfig = {
     Google({
       authorization: {
         params: {
-          hd: DOMINIOS_PERMITIDOS[0], // sugiere el Workspace en el selector
+          // Con un solo dominio, «hd» deja solo ese Workspace en el selector; con varios no se usa
+          // (dejaría fuera a los demás). El callback signIn igual valida dominio y usuario.
+          ...(DOMINIOS_PERMITIDOS.length === 1 ? { hd: DOMINIOS_PERMITIDOS[0] } : {}),
           prompt: "select_account",
         },
       },

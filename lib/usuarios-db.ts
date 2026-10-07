@@ -60,6 +60,18 @@ export async function resolverRol(correo: string): Promise<{ rol: Rol; nombre: s
   }
 }
 
+/** Si el correo está en «Usuarios y roles». Sin base propia o con error, false (el login se cierra). */
+export async function estaRegistrado(correo: string): Promise<boolean> {
+  if (!poolPlataforma || !TABLA_USUARIOS) return false;
+  try {
+    const { rows } = await poolPlataforma.query(`SELECT 1 FROM ${TABLA_USUARIOS} WHERE correo = $1`, [correo]);
+    return rows.length > 0;
+  } catch (error) {
+    console.error("Error al revisar si el usuario está registrado:", error);
+    return false;
+  }
+}
+
 interface FilaUsuario {
   correo: string;
   nombre: string | null;

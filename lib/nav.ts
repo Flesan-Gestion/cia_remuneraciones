@@ -1,4 +1,4 @@
-import { BookOpenText, FileSignature, FileText, LayoutGrid, Send, Settings, SplitSquareHorizontal } from "lucide-react";
+import { BookOpenText, FileSignature, FileText, LayoutGrid, Settings, SplitSquareHorizontal } from "lucide-react";
 import { crearMigas, type NavItem } from "@/lib/nav-base";
 
 export * from "@/lib/nav-base";
@@ -8,9 +8,10 @@ export * from "@/lib/nav-base";
 // consumen estos arreglos para no mantener listas sincronizadas a mano. Los tipos y las
 // funciones comunes vienen de `lib/nav-base.ts` (shell).
 
-/** Nombre en el encabezado del sidebar: texto normal + palabra destacada en rojo. `texto` puede
- * quedar vacío si el nombre es una sola palabra (va toda en rojo). */
-export const NOMBRE_PLATAFORMA = { texto: "Remuneraciones", destacado: "SAP" };
+/** Nombre en el encabezado del sidebar: texto normal + palabra destacada en rojo («Remuneraciones G2»).
+ * `texto` puede quedar vacío si el nombre es una sola palabra (va toda en rojo). */
+export const NOMBRE_PLATAFORMA = { texto: "Remuneraciones", destacado: "G2" };
+export const NOMBRE_COMPLETO = `${NOMBRE_PLATAFORMA.texto} ${NOMBRE_PLATAFORMA.destacado}`.trim();
 
 /**
  * El menú filtra con un solo texto de perfil (UsuarioActual.perfil). Aquí se juntan los accesos de
@@ -34,11 +35,19 @@ export const NAV_ITEMS: NavItem[] = [
   // Perfiles (lib/liquidaciones/tipos.ts): quien no tiene acceso no ve Liquidaciones; el envío
   // por correo es solo de RR.HH. Los libros, para quien tiene rol en los libros
   // (lib/libro/tipos.ts). Cada ruta valida lo mismo en el servidor.
-  { href: "/liquidaciones", label: "Liquidaciones", icon: FileText, perfiles: conSufijos(["rrhh", "jefatura"], ["", ...CON_LIBROS]) },
-  { href: "/envios", label: "Envío por correo", icon: Send, perfiles: conSufijos(["rrhh"], ["", ...CON_LIBROS]) },
+  {
+    href: "/liquidaciones",
+    label: "Liquidaciones",
+    icon: FileText,
+    perfiles: conSufijos(["rrhh", "jefatura"], ["", ...CON_LIBROS]),
+    children: [
+      { href: "/liquidaciones", label: "Buscar liquidaciones" },
+      { href: "/envios", label: "Envío por correo", perfiles: conSufijos(["rrhh"], ["", ...CON_LIBROS]) },
+    ],
+  },
   { href: "/libro-remuneraciones", label: "Libro de remuneraciones", icon: BookOpenText, perfiles: conSufijos(PERFILES, CON_LIBROS) },
   { href: "/libro-prorrateado", label: "Libro prorrateado", icon: SplitSquareHorizontal, perfiles: conSufijos(PERFILES, CON_PRORRATEADO) },
-  { href: "/finiquitos", label: "Finiquitos", icon: FileSignature, perfiles: conSufijos(PERFILES, CON_FINIQUITOS) },
+  { href: "/finiquitos", label: "Libro de finiquitos", icon: FileSignature, perfiles: conSufijos(PERFILES, CON_FINIQUITOS) },
 ];
 
 /** Configuración no va en el menú principal: vive en el pie del sidebar. Está abierta a todos y

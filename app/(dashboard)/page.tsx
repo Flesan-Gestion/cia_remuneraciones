@@ -68,8 +68,8 @@ export default async function HomePage() {
     },
     {
       href: "/finiquitos",
-      titulo: "Finiquitos",
-      descripcion: "Libro de finiquitos de SAP por razón social, centro de costo y semana de pago.",
+      titulo: "Libro de finiquitos",
+      descripcion: "Libro de finiquitos por razón social, centro de costo y semana de pago.",
       puntos: ["Detalle con cada concepto, resumen por persona y por obra", "Una o varias semanas de pago en un solo archivo"],
       icon: FileSignature,
       estado: finiquitos ? "disponible" : "sin_acceso",
@@ -82,9 +82,9 @@ export default async function HomePage() {
   return (
     <div className="animate-fade-in page-shell py-8 lg:py-12">
       <header className="mb-8 lg:mb-10 max-w-3xl">
-        <p className="label-eyebrow text-flesan-red! mb-2">Remuneraciones SAP · Grupo Flesan</p>
+        <p className="label-eyebrow text-flesan-red! mb-2">Remuneraciones G2 · Grupo Flesan</p>
         <h1 className="display-title text-3xl sm:text-4xl text-text">{nombre ? `Hola, ${nombre}` : "Bienvenido"}</h1>
-        <p className="body-lede mt-3">Elige el módulo al que quieres entrar. Liquidaciones, libros de remuneraciones y finiquitos de SAP, en un solo lugar.</p>
+        <p className="body-lede mt-3">Elige el módulo al que quieres entrar. Liquidaciones, libros de remuneraciones y finiquitos, en un solo lugar.</p>
       </header>
 
       {sinNada && (

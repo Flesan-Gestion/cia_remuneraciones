@@ -1,13 +1,13 @@
 import Link from "next/link";
 import paquete from "@/package.json";
 import { PageHeader } from "@/components/page-header";
-import { NOMBRE_PLATAFORMA, VERSION_SHELL } from "@/lib/nav";
+import { NOMBRE_COMPLETO, VERSION_SHELL } from "@/lib/nav";
 
 // Configuración › Acerca de: abierta a todos. La versión sale de package.json y la del estándar,
 // de lib/nav-base.ts (se actualiza al traer una versión nueva del shell).
 export default function AcercaPage() {
   const filas: [string, string][] = [
-    ["Plataforma", `${NOMBRE_PLATAFORMA.texto} ${NOMBRE_PLATAFORMA.destacado}`.trim()],
+    ["Plataforma", NOMBRE_COMPLETO],
     ["Versión", paquete.version],
     ["Estándar de plataformas", VERSION_SHELL],
     ["Entorno", process.env.NODE_ENV === "production" ? "Producción" : "Desarrollo"],

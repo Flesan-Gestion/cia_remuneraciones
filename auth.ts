@@ -1,7 +1,7 @@
 import NextAuth, { type DefaultSession } from "next-auth";
 
 import { authConfig } from "./auth.config";
-import { resolverRol as resolverRolPersistido } from "@/lib/usuarios-db";
+import { estaRegistrado, resolverRol as resolverRolPersistido } from "@/lib/usuarios-db";
 import type { Rol } from "@/lib/roles";
 
 /**
@@ -42,6 +42,13 @@ const { handlers, signIn, signOut, auth: authOriginal } = NextAuth({
   ...authConfig,
   callbacks: {
     ...authConfig.callbacks,
+    /** Solo entra quien es de un dominio permitido (auth.config.ts) y está en «Usuarios y roles»
+     * (o en CIA_ADMIN_EMAILS). Si no, Auth.js vuelve a /login con error=AccessDenied. */
+    async signIn(params) {
+      if (!authConfig.callbacks.signIn(params)) return false;
+      const email = params.profile?.email?.toLowerCase() ?? "";
+      return CIA_ADMINS.includes(email) || (await estaRegistrado(email));
+    },
     async session({ session, token }) {
       if (session.user) {
         const email = String(token.email ?? session.user.email ?? "").toLowerCase();

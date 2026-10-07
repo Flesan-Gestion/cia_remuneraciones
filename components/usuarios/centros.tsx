@@ -162,8 +162,8 @@ export function CentrosCosto({ personas, onCambio }: { personas: { correo: strin
                   </td>
                   <td className="px-4 py-2.5 min-w-64">
                     <span className="flex flex-wrap items-center gap-1.5">
-                      {c.ggo.map((g) => (
-                        <span key={g} className="inline-flex items-center gap-1 h-6 pl-2.5 pr-1 rounded-full bg-surface-2 text-xs text-text" title={g}>
+                      {c.ggo.map((g, i) => (
+                        <span key={`${g}-${i}`} className="inline-flex items-center gap-1 h-6 pl-2.5 pr-1 rounded-full bg-surface-2 text-xs text-text" title={g}>
                           {nombreDe(g)}
                           <button
                             type="button"
