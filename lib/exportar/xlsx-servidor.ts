@@ -2,10 +2,10 @@ import zlib from "node:zlib";
 
 /**
  * Escritor mínimo de .xlsx para el servidor: una o varias hojas, cada una con una imagen opcional
- * anclada en A1, celdas combinadas y seis estilos (los de los Excel de PhpSpreadsheet de los
- * aplicativos antiguos). Escribe el XML fila a fila y lo comprime a medida que avanza, así que un
- * libro de decenas de miles de filas no ocupa más que el archivo final (ExcelJS en memoria pedía
- * ~2 GB para 15.000 filas × 130 columnas). Solo runtime Node.
+ * anclada en A1, celdas combinadas, seis estilos (los de los Excel de PhpSpreadsheet de los
+ * aplicativos antiguos) y fórmulas con su resultado ya calculado. Escribe el XML fila a fila y lo
+ * comprime a medida que avanza, así que un libro de decenas de miles de filas no ocupa más que el
+ * archivo final (ExcelJS en memoria pedía ~2 GB para 15.000 filas × 130 columnas). Solo runtime Node.
  *
  * Uso: por hoja, anchos de columna → filas en orden creciente; después generar(). Una hoja sola es
  * `new HojaXlsx(nombre)`; varias, `new LibroXlsx()` y `libro.hoja(nombre)` para cada una.
@@ -22,6 +22,9 @@ export interface CeldaXlsx {
   col: number;
   valor: string | number | null;
   estilo?: EstiloXlsx;
+  /** Fórmula de Excel sin el «=» (ej. «B9+C9-D9»). `valor` es su resultado numérico: se guarda junto
+   * a la fórmula para que la cifra se vea sin recalcular (visores, vista previa). */
+  formula?: string;
 }
 
 const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
@@ -45,8 +48,12 @@ function escapar(texto: string) {
     .replace(/>/g, "&gt;");
 }
 
-function xmlCelda(ref: string, valor: string | number | null, s: number) {
+function xmlCelda(ref: string, valor: string | number | null, s: number, formula?: string) {
   const estilo = s ? ` s="${s}"` : "";
+  if (formula) {
+    const resultado = typeof valor === "number" && Number.isFinite(valor) ? `<v>${valor === 0 ? 0 : valor}</v>` : "";
+    return `<c r="${ref}"${estilo}><f>${escapar(formula)}</f>${resultado}</c>`;
+  }
   if (valor === null || valor === "") return `<c r="${ref}"${estilo}/>`;
   if (typeof valor === "number") return Number.isFinite(valor) ? `<c r="${ref}"${estilo}><v>${valor === 0 ? 0 : valor}</v></c>` : `<c r="${ref}"${estilo}/>`;
   return `<c r="${ref}"${estilo} t="inlineStr"><is><t xml:space="preserve">${escapar(valor)}</t></is></c>`;
@@ -270,7 +277,7 @@ export class HojaXlsx {
     const xml = celdas
       .slice()
       .sort((a, b) => a.col - b.col)
-      .map((c) => xmlCelda(`${letraColumna(c.col)}${numero}`, c.valor, INDICE_ESTILO[c.estilo ?? "normal"]))
+      .map((c) => xmlCelda(`${letraColumna(c.col)}${numero}`, c.valor, INDICE_ESTILO[c.estilo ?? "normal"], c.formula))
       .join("");
     await this.agregar(`<row r="${numero}"${alto ? ` ht="${alto}" customHeight="1"` : ""}>${xml}</row>`);
   }

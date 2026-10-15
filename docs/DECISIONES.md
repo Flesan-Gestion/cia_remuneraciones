@@ -134,6 +134,22 @@ filas, el aviso «Sin resultados» en vez de un Excel vacío.
   aquí lo hace un administrador de la plataforma en Usuarios y roles.
 - El nombre del remitente de los correos de liquidaciones sigue en `SMTP_FROM_NAME` (`.env`).
 
+### Columna LLSS (requerimiento del 2026-10-15)
+
+- Columna del Excel después del último concepto, antes de AMES (el antiguo no la tenía). Es una
+  fórmula de Excel sobre los conceptos de la misma fila: (COTIZACION AFP + AHORRO VOLUNTARIO + APV REG A +
+  APV REG B + COTIZACION ADICIONAL SALUD + COTIZACION SALUD + SEGURO CESANTIA) − ASIGNACION FAMILIAR
+  + FULL AHORRO CAJA + SEGURO CCAF + PRESTAMO CCAF LOS ANDES + APORTE AFC + MUTUAL + SIS +
+  CONTRIBUCION EMPREADOR PENSIÓN + COMP. EXPECTATIVA DE VIDA + CONTRIB INGRESO PROTECC.
+  (`COLUMNA_LLSS` en `lib/libro/conceptos.ts`).
+- La fórmula nombra solo los conceptos que están en el archivo: los que no aparecen (todas sus
+  filas en cero) valen cero. Cada celda guarda además el resultado, que se ve sin recalcular.
+- El libro de GGO no trae esos conceptos (solo costo empresa): ahí no va la columna, porque saldría
+  cero.
+- Comprobado con septiembre de 2026 (Administrador, RRHH con DM, un Administrativo RRHH y un GGO):
+  las demás columnas quedan idénticas y Excel, al recalcular, da lo mismo que el resultado guardado
+  (2.695 filas).
+
 ## 2026-10-06 · Encargados de centros de costo administrados en la plataforma
 
 - Regla: **todos ven exactamente lo mismo que en los aplicativos antiguos.**

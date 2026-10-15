@@ -129,7 +129,8 @@ orden del Excel antiguo) y `lib/libro/excel.ts` (el Excel).
 4. Tres variantes, como el PHP: Administrador (todo), GGO (solo costo empresa) y el resto (RRHH
    sin NFG; encargados con su filtro de CC, no planta y NFG).
 5. El Excel lo escribe `lib/exportar/xlsx-servidor.ts`: un .xlsx mínimo (una o varias hojas, logo,
-   seis estilos) que se comprime a medida que se escriben las filas. ExcelJS en memoria necesitaba
+   seis estilos, fórmulas con su resultado, como LLSS) que se comprime a medida que se escriben las
+   filas. ExcelJS en memoria necesitaba
    ~2 GB para un libro de 15.000 filas; así son ~40 MB.
 
 La lista de empresas y CC de Administrador y RRHH recorre la tabla de liquidaciones completa: se

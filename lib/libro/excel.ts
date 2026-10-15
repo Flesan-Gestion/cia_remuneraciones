@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { HojaXlsx, type CeldaXlsx } from "@/lib/exportar/xlsx-servidor";
-import { COLUMNAS_FIN, COLUMNAS_INICIO, CONCEPTOS } from "@/lib/libro/conceptos";
+import { HojaXlsx, letraColumna, type CeldaXlsx } from "@/lib/exportar/xlsx-servidor";
+import { COLUMNA_LLSS, COLUMNAS_FIN, COLUMNAS_INICIO, CONCEPTOS } from "@/lib/libro/conceptos";
 import type { FilaLibro } from "@/lib/libro/consultas";
 
 /**
@@ -9,6 +9,7 @@ import type { FilaLibro } from "@/lib/libro/consultas";
  * hoja «libro_rem», logo en A1, títulos en A4:A6, encabezados en la fila 8 desde la columna B
  * (gris, negrita) y una fila por registro desde la 9, con bordes finos. Solo van los conceptos
  * que tienen algún valor, en el orden de la lista. Los valores se convierten como lo hacía PHP.
+ * Además, antes de AMES, la columna LLSS: una fórmula sobre los conceptos de la fila (COLUMNA_LLSS).
  * Solo runtime Node.
  */
 
@@ -95,17 +96,34 @@ export async function generarExcelLibro(filas: FilaLibro[], encabezado: Encabeza
 
   // Conceptos con algún valor, en el orden de la lista maestra; los valores ya convertidos.
   const activos = filas.length ? CONCEPTOS.filter((c) => filas.some((f) => tieneValor(numeroComoPhp(f[c.clave])))) : [];
-  const columnas = [
+  const iniciales = [
     ...COLUMNAS_INICIO.map((c) => ({ clave: c.clave as string, titulo: c.titulo as string, concepto: false })),
     ...activos.map((c) => ({ clave: c.clave, titulo: c.titulo, concepto: true })),
-    ...COLUMNAS_FIN.map((c) => ({ clave: c.clave as string, titulo: c.titulo as string, concepto: false })),
   ];
-  const valores = (f: FilaLibro) =>
-    columnas.map((c) => {
-      if (c.concepto) return numeroComoPhp(f[c.clave]);
-      const v = f[c.clave] ?? "";
-      return c.clave.includes("fecha") && v ? fechaComoPhp(v) : valorComoPhpSpreadsheet(v);
-    });
+  const finales = COLUMNAS_FIN.map((c) => ({ clave: c.clave as string, titulo: c.titulo as string, concepto: false }));
+  // LLSS va después del último concepto (antes de AMES), con #,##0 como los conceptos, y suma los
+  // términos que están en el archivo (uno que no aparece vale cero en todas las filas). Sin ninguno
+  // (el libro de GGO no trae esos conceptos) no va: saldría cero aunque la persona sí tenga cotizaciones.
+  const terminosLlss = COLUMNA_LLSS.terminos
+    .map((t) => ({ signo: t.signo, i: iniciales.findIndex((c) => c.concepto && c.clave === t.clave) }))
+    .filter((t) => t.i >= 0);
+  const conLlss = terminosLlss.length > 0;
+  const columnas = [...iniciales, ...(conLlss ? [{ clave: "llss", titulo: COLUMNA_LLSS.titulo, concepto: true }] : []), ...finales];
+  const iLlss = conLlss ? iniciales.length : -1;
+  /** La fórmula de LLSS en la fila `n` (ej. «AE9+AF9-AD9+AR9»). */
+  const formulaLlss = (n: number) =>
+    terminosLlss.map((t, k) => `${t.signo < 0 ? "-" : k ? "+" : ""}${letraColumna(t.i + 2)}${n}`).join("");
+  const convertir = (f: FilaLibro, c: { clave: string; concepto: boolean }) => {
+    if (c.concepto) return numeroComoPhp(f[c.clave]);
+    const v = f[c.clave] ?? "";
+    return c.clave.includes("fecha") && v ? fechaComoPhp(v) : valorComoPhpSpreadsheet(v);
+  };
+  const valores = (f: FilaLibro) => {
+    const fila = iniciales.map((c) => convertir(f, c));
+    // El resultado de la fórmula, con los mismos valores de las celdas.
+    if (conLlss) fila.push(terminosLlss.reduce((s, t) => s + t.signo * (fila[t.i] as number), 0));
+    return [...fila, ...finales.map((c) => convertir(f, c))];
+  };
 
   // Ancho de cada columna según su contenido (autosize), antes de escribir las filas.
   if (filas.length) {
@@ -130,7 +148,12 @@ export async function generarExcelLibro(filas: FilaLibro[], encabezado: Encabeza
     await hoja.fila(8, columnas.map((c, i) => ({ col: i + 2, valor: c.titulo, estilo: "encabezado" })));
     let n = 9;
     for (const f of filas) {
-      const celdas: CeldaXlsx[] = valores(f).map((v, i) => ({ col: i + 2, valor: v, estilo: columnas[i].concepto ? "borde_miles" : "borde" }));
+      const celdas: CeldaXlsx[] = valores(f).map((v, i) => ({
+        col: i + 2,
+        valor: v,
+        estilo: columnas[i].concepto ? "borde_miles" : "borde",
+        formula: i === iLlss ? formulaLlss(n) : undefined,
+      }));
       await hoja.fila(n++, celdas);
     }
   }

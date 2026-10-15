@@ -38,6 +38,37 @@ export const COLUMNAS_FIN = [
   { clave: "administrativo", titulo: "ADMINISTRATIVO" },
 ] as const;
 
+/**
+ * Columna LLSS, antes de AMES (requerimiento del 2026-10-15; el antiguo no la tenía): una fórmula de Excel
+ * sobre los conceptos de la misma fila,
+ * (COTIZACION AFP + AHORRO VOLUNTARIO + APV REG A + APV REG B + COTIZACION ADICIONAL SALUD +
+ * COTIZACION SALUD + SEGURO CESANTIA) − ASIGNACION FAMILIAR + FULL AHORRO CAJA + SEGURO CCAF +
+ * PRESTAMO CCAF LOS ANDES + APORTE AFC + MUTUAL + SIS + CONTRIBUCION EMPREADOR PENSIÓN +
+ * COMP. EXPECTATIVA DE VIDA + CONTRIB INGRESO PROTECC.
+ */
+export const COLUMNA_LLSS = {
+  titulo: "LLSS",
+  terminos: [
+    { clave: "cotizacion_afp", signo: 1 },
+    { clave: "ahorro_voluntario", signo: 1 },
+    { clave: "apv_reg_a", signo: 1 },
+    { clave: "apv_reg_b", signo: 1 },
+    { clave: "cotizacion_adiciona_salud", signo: 1 },
+    { clave: "cotizacion_salud", signo: 1 },
+    { clave: "seguro_cesantia", signo: 1 },
+    { clave: "asignacio_familiar", signo: -1 },
+    { clave: "full_ahorro_caja", signo: 1 },
+    { clave: "seguro_ccaf", signo: 1 },
+    { clave: "prestamo_ccaf_los_andes", signo: 1 },
+    { clave: "aporte_afc", signo: 1 },
+    { clave: "mutual", signo: 1 },
+    { clave: "sis", signo: 1 },
+    { clave: "contrib_empreador_pension", signo: 1 },
+    { clave: "comp_expectativa_vida", signo: 1 },
+    { clave: "contrib_ingreso_proteccion", signo: 1 },
+  ],
+} as const;
+
 /** Conceptos posibles: en el Excel solo aparecen los que tienen algún valor distinto de cero. */
 export const CONCEPTOS: Concepto[] = [
   { clave: "costo_empresa", titulo: "COSTO EMPRESA", tipo: "costo_empresa" },
