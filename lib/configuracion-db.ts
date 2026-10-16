@@ -12,8 +12,9 @@ declare global {
 const URL = process.env.DATABASE_URL_PLATAFORMA;
 // ESQUEMA_PLATAFORMA; si no está, DB_QA_SCHEMA (nombre que ya usan algunas plataformas).
 const ESQUEMA_ENV = process.env.ESQUEMA_PLATAFORMA ?? process.env.DB_QA_SCHEMA;
-// El esquema se interpola en el SQL: solo se acepta un nombre cia_* simple.
-const ESQUEMA = ESQUEMA_ENV && /^cia_[a-z0-9_]{1,60}$/.test(ESQUEMA_ENV) ? ESQUEMA_ENV : null;
+// El esquema se interpola en el SQL: solo se acepta un identificador simple en minúsculas
+// (cia_liquidaciones en QA, remuneracionesg2 en producción).
+const ESQUEMA = ESQUEMA_ENV && /^[a-z_][a-z0-9_]{0,62}$/.test(ESQUEMA_ENV) ? ESQUEMA_ENV : null;
 
 export const configuracionDisponible = Boolean(URL && ESQUEMA);
 
