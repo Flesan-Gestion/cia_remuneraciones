@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronsUpDown, LogOut } from "lucide-react";
-import { cerrarSesion } from "@/lib/auth-actions";
+import { signOut } from "next-auth/react";
 import { etiquetaRol, type Rol } from "@/lib/roles";
 import { OpcionesUsuarioModulos } from "@/components/modulos";
 
@@ -18,6 +18,16 @@ function iniciales(name?: string | null, email?: string | null): string {
   const partes = base.split(/[\s.]+/).filter(Boolean);
   const dos = (partes[0]?.[0] ?? "") + (partes[1]?.[0] ?? "");
   return (dos || base[0] || "?").toUpperCase();
+}
+
+/**
+ * Cierra la sesión vía el endpoint de Auth.js (/api/auth/signout, fuera del matcher del
+ * middleware). No se usa una Server Action porque esa hace POST a la ruta actual: con la
+ * sesión ya expirada el middleware la redirige a /login y el cliente recibe HTML en vez
+ * de la respuesta RSC ("An unexpected response was received from the server").
+ */
+function cerrarSesion() {
+  void signOut({ redirectTo: "/login" });
 }
 
 export function UserMenu({ name, email, image, role }: UserMenuProps) {
@@ -67,16 +77,15 @@ export function UserMenu({ name, email, image, role }: UserMenuProps) {
               </span>
             )}
           </div>
-          <form action={cerrarSesion}>
-            <button
-              type="submit"
+          <button
+              type="button"
+              onClick={cerrarSesion}
               role="menuitem"
               className="w-full flex items-center gap-3 px-4 py-2.5 font-label text-xs tracking-[0.08em] uppercase text-muted hover:text-flesan-red hover:bg-bg cursor-pointer"
             >
               <LogOut className="w-[0.9375rem] h-[0.9375rem] shrink-0" />
               Cerrar sesión
             </button>
-          </form>
         </div>
       )}
     </div>
@@ -160,16 +169,15 @@ export function UserCard({ name, email, image, role, colapsado = false }: UserMe
             {email && <p className="text-xs text-muted truncate">{email}</p>}
           </div>
           <OpcionesUsuarioModulos />
-          <form action={cerrarSesion}>
-            <button
-              type="submit"
+          <button
+              type="button"
+              onClick={cerrarSesion}
               role="menuitem"
               className="w-full flex items-center gap-3 px-4 py-2.5 font-label text-xs tracking-[0.08em] uppercase text-muted hover:text-flesan-red hover:bg-bg cursor-pointer"
             >
               <LogOut className="w-[0.9375rem] h-[0.9375rem] shrink-0" />
               Cerrar sesión
             </button>
-          </form>
         </div>
       )}
     </div>
