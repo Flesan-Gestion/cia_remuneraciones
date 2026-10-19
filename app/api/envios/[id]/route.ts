@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { registrarActividad } from "@/lib/actividad-db";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
-import { cambiarEstadoLote, leerLote, listarDetalle, reintentarErrores } from "@/lib/liquidaciones/envios-db";
+import { cambiarEstadoLote, cerrarSiTermino, leerLote, listarDetalle, reintentarErrores } from "@/lib/liquidaciones/envios-db";
 import { ENVIO_HABILITADO, enviarPrueba, lanzarEnvio } from "@/lib/liquidaciones/envios";
 import type { EstadoLote } from "@/lib/liquidaciones/tipos";
 
@@ -77,8 +77,12 @@ export async function POST(request: Request, { params }: Contexto) {
       return NextResponse.json({ error: "El envío cambió de estado. Actualiza la página." }, { status: 409 });
     }
     await registrarActividad({ correo: sesion.email, accion: t.accion, entidad: "Envío por correo", entidadId: id, detalle: { periodo: lote.periodo } });
-    if (t.a === "enviando") lanzarEnvio();
-    return NextResponse.json({ ok: true });
+    if (t.a !== "enviando") return NextResponse.json({ ok: true });
+    // Si mientras estuvo pausado se excluyó todo lo pendiente, no queda nada que enviar: el proceso
+    // no lo tomaría nunca (solo toma lotes con pendientes), así que se cierra aquí.
+    const terminado = await cerrarSiTermino(id);
+    if (!terminado) lanzarEnvio();
+    return NextResponse.json({ ok: true, terminado });
   } catch (error) {
     console.error("Error en la acción del lote:", error);
     return NextResponse.json({ error: "No se pudo completar la acción." }, { status: 500 });

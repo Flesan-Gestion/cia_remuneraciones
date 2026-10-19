@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { toast } from "sonner";
-import { ArrowLeft, Ban, MailCheck, Pause, Play, RotateCcw, Search, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Ban, ListChecks, MailCheck, Pause, Play, RotateCcw, Search, Send, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { normalizar, periodoLegible } from "@/lib/liquidaciones/formato";
-import type { DetalleEnvio, EstadoEnvio, Lote } from "@/lib/liquidaciones/tipos";
-import { enviarJson, Estado, fechaHoraCorta, fetcher, Nota, Paginacion, Th, type Tono } from "@/components/liquidaciones/ui";
+import { Desplegable, type OpcionDesplegable } from "@/components/desplegable";
+import { miles, normalizar, periodoLegible } from "@/lib/liquidaciones/formato";
+import type { AccionExclusion, DetalleEnvio, Empresa, EstadoEnvio, Lote } from "@/lib/liquidaciones/tipos";
+import { Casilla, enviarJson, Estado, fechaHoraCorta, fetcher, Nota, Paginacion, Th, type Tono } from "@/components/liquidaciones/ui";
 import { ESTADOS_LOTE } from "@/components/liquidaciones/envios";
 
 const ESTADOS_ENVIO: Record<EstadoEnvio, { texto: string; tono: Tono }> = {
@@ -21,6 +22,9 @@ const ESTADOS_ENVIO: Record<EstadoEnvio, { texto: string; tono: Tono }> = {
 };
 
 const POR_PAGINA = 50;
+/** Valor de filtro para quien no tiene el dato (los lotes preparados antes del 2026-10-19 no traen CC ni planta). */
+const SIN_DATO = "__sin__";
+const PLANTA: Record<string, string> = { PL: "Planta", NP: "No planta" };
 
 interface DatosLote {
   lote: Lote;
@@ -28,38 +32,167 @@ interface DatosLote {
   envioHabilitado: boolean;
 }
 
+const personas = (n: number) => `${miles(n)} ${n === 1 ? "persona" : "personas"}`;
+
+/** Opciones de un filtro con lo que hay en el lote y cuántas personas tiene cada una. */
+function opcionesDe(
+  filas: DetalleEnvio[],
+  clave: (d: DetalleEnvio) => string | null,
+  texto: (valor: string, d: DetalleEnvio) => string,
+  sinDato: string,
+): OpcionDesplegable[] {
+  const grupos = new Map<string, { d: DetalleEnvio; n: number }>();
+  for (const d of filas) {
+    const valor = clave(d) || SIN_DATO;
+    const g = grupos.get(valor);
+    if (g) g.n++;
+    else grupos.set(valor, { d, n: 1 });
+  }
+  return [...grupos]
+    .map(([valor, { d, n }]) => ({ valor, texto: valor === SIN_DATO ? sinDato : texto(valor, d), detalle: miles(n) }))
+    .sort((a, b) => Number(a.valor === SIN_DATO) - Number(b.valor === SIN_DATO) || a.texto.localeCompare(b.texto, "es"));
+}
+
 export function LoteEnvio({ id }: { id: number }) {
   const { data, error, isLoading, mutate } = useSWR<DatosLote>(`/api/envios/${id}`, fetcher, {
-    // Mientras envía, se actualiza solo.
-    refreshInterval: (d) => (d?.lote.estado === "enviando" ? 5000 : 0),
+    // Mientras envía (o terminan de salir los correos de antes de una pausa), se actualiza solo.
+    refreshInterval: (d) => (d?.lote.estado === "enviando" || d?.detalle.some((x) => x.estado === "enviando") ? 5000 : 0),
   });
+  // Nombres de las razones sociales: el lote guarda solo el código.
+  const { data: filtros } = useSWR<{ empresas: Empresa[] }>("/api/liquidaciones/filtros", fetcher, { revalidateOnFocus: false });
   const [filtro, setFiltro] = useState<EstadoEnvio | "">("");
   const [texto, setTexto] = useState("");
+  const [empresas, setEmpresas] = useState<string[]>([]);
+  const [centros, setCentros] = useState<string[]>([]);
+  const [planta, setPlanta] = useState("");
+  const [marcas, setMarcas] = useState<Set<number>>(() => new Set());
   const [pagina, setPagina] = useState(0);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [confirmandoBloque, setConfirmandoBloque] = useState<AccionExclusion | null>(null);
 
   const detalle = useMemo(() => data?.detalle ?? [], [data]);
-  const filtradas = useMemo(() => {
+  const nombreEmpresa = useMemo(() => new Map((filtros?.empresas ?? []).map((e) => [e.codigo, e.nombre])), [filtros]);
+  const empresaDe = (codigo: string | null) => (codigo ? (nombreEmpresa.get(codigo) ?? codigo) : "—");
+
+  // Las opciones de cada filtro se acotan a lo elegido en el anterior (razón social → CC → planta).
+  const enEmpresas = useMemo(() => (empresas.length ? detalle.filter((d) => empresas.includes(d.sociedad || SIN_DATO)) : detalle), [detalle, empresas]);
+  const enCentros = useMemo(() => (centros.length ? enEmpresas.filter((d) => centros.includes(d.centro_costo || SIN_DATO)) : enEmpresas), [enEmpresas, centros]);
+  const opcionesEmpresa = useMemo(() => opcionesDe(detalle, (d) => d.sociedad, (v) => nombreEmpresa.get(v) ?? v, "Sin razón social"), [detalle, nombreEmpresa]);
+  const opcionesCentro = useMemo(
+    () => opcionesDe(enEmpresas, (d) => d.centro_costo, (v, d) => (d.nombre_cc ? `${v} - ${d.nombre_cc}` : v), "Sin centro de costo"),
+    [enEmpresas],
+  );
+  const opcionesPlanta = useMemo(() => {
+    const opciones = opcionesDe(enCentros, (d) => d.planta_noplanta, (v) => PLANTA[v] ?? v, "Sin dato");
+    // La elegida sigue a la vista aunque ya no tenga personas con los otros filtros.
+    return planta && !opciones.some((o) => o.valor === planta)
+      ? [...opciones, { valor: planta, texto: planta === SIN_DATO ? "Sin dato" : (PLANTA[planta] ?? planta), detalle: "0" }]
+      : opciones;
+  }, [enCentros, planta]);
+
+  // Todos los filtros menos el estado: los chips de estado cuentan sobre esto.
+  const porFiltros = useMemo(() => {
     const palabras = normalizar(texto).split(/\s+/).filter(Boolean);
-    return detalle.filter((d) => {
-      if (filtro && d.estado !== filtro) return false;
+    return enCentros.filter((d) => {
+      if (planta && (d.planta_noplanta || SIN_DATO) !== planta) return false;
       if (!palabras.length) return true;
-      const t = normalizar(`${d.nombre} ${d.numero_de_personal} ${d.correo ?? ""}`);
+      const t = normalizar(`${d.nombre} ${d.numero_de_personal} ${d.correo ?? ""} ${d.centro_costo ?? ""} ${d.nombre_cc ?? ""}`);
       return palabras.every((p) => t.includes(p));
     });
-  }, [detalle, filtro, texto]);
-  useEffect(() => setPagina(0), [filtro, texto]);
+  }, [enCentros, planta, texto]);
+  const filtradas = useMemo(() => (filtro ? porFiltros.filter((d) => d.estado === filtro) : porFiltros), [porFiltros, filtro]);
+  useEffect(() => setPagina(0), [filtro, texto, empresas, centros, planta]);
+  // Lo que se iba a confirmar cambia con los filtros o las marcas: se vuelve a pedir.
+  useEffect(() => setConfirmandoBloque(null), [filtro, texto, empresas, centros, planta, marcas]);
 
   if (isLoading) return <div className="skeleton h-64 rounded-flesan" />;
   if (error || !data) return <Nota tono="alerta" titulo="No se pudo leer el envío">{error?.message ?? "Intenta de nuevo."}</Nota>;
 
   const { lote } = data;
-  const conteo = (e: EstadoEnvio) => detalle.filter((d) => d.estado === e).length;
+  // Excluir e incluir: antes de aprobar o con el envío pausado, y solo lo que aún no sale.
+  const editable = lote.estado === "por_aprobar" || lote.estado === "pausado";
+  const marcable = (d: DetalleEnvio) => editable && (d.estado === "pendiente" || d.estado === "excluido");
+  const conteo = (e: EstadoEnvio) => porFiltros.filter((d) => d.estado === e).length;
   const aEnviar = lote.total - lote.excluidos - lote.sin_correo;
   const avance = aEnviar > 0 ? Math.round((lote.enviados / aEnviar) * 100) : 0;
   const paginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
   const visibles = filtradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
+
+  // Acciones en bloque: sobre las marcadas o, si no hay marcas, sobre lo filtrado.
+  const marcadas = detalle.filter((d) => marcas.has(d.id) && marcable(d));
+  const hayFiltro = Boolean(filtro || texto.trim() || empresas.length || centros.length || planta);
+  const filtradasMarcables = filtradas.filter(marcable);
+  const objetivo = marcadas.length ? marcadas : filtradasMarcables;
+  // Filtradas que no se pueden excluir ni incluir (sin correo, enviadas, con error).
+  const fijas = filtradas.length - filtradasMarcables.length;
+  const enObjetivo = new Set(objetivo.map((d) => d.id));
+  const enFiltro = new Set(filtradas.map((d) => d.id));
+  const fueraDelFiltro = marcadas.filter((d) => !enFiltro.has(d.id)).length;
+  const marcadasEnFiltro = filtradasMarcables.filter((d) => marcas.has(d.id)).length;
+  const pendientes = detalle.filter((d) => d.estado === "pendiente").length;
+  const nExcluir = objetivo.filter((d) => d.estado === "pendiente").length;
+  const nIncluir = objetivo.length - nExcluir;
+  const nResto = detalle.filter((d) => d.estado === "pendiente" && !enObjetivo.has(d.id)).length;
+  const confirmacion: Record<AccionExclusion, string> = {
+    excluir: `Se excluyen ${personas(nExcluir)}: quedan ${miles(pendientes - nExcluir)} por enviar.`,
+    incluir: `Vuelven al envío ${personas(nIncluir)}: quedan ${miles(pendientes + nIncluir)} por enviar.`,
+    solo: `Quedan por enviar solo ${personas(objetivo.length)}${nResto ? ` y se excluye al resto (${miles(nResto)})` : ""}.`,
+  };
+
+  // Lo que se envía, por razón social, para revisar antes de aprobar.
+  const porEmpresa = new Map<string | null, number>();
+  for (const d of detalle) if (d.estado === "pendiente") porEmpresa.set(d.sociedad, (porEmpresa.get(d.sociedad) ?? 0) + 1);
+  const desglose = [...porEmpresa].sort((a, b) => b[1] - a[1]);
+  const textoDesglose =
+    desglose.length === 1
+      ? `, todos de ${empresaDe(desglose[0][0])}`
+      : desglose.length > 1
+        ? `: ${desglose
+            .slice(0, 4)
+            .map(([e, n]) => `${empresaDe(e)} ${miles(n)}`)
+            .join(", ")}${desglose.length > 4 ? ` y ${desglose.length - 4} razones sociales más` : ""}`
+        : "";
+
+  /** Cómo se eligió a las personas, para el registro de actividad. */
+  function criterio() {
+    if (marcadas.length) return marcadas.length === 1 ? "la marcada" : `las ${miles(marcadas.length)} marcadas`;
+    if (!hayFiltro) return "todas";
+    const partes = [
+      empresas.length ? `razón social ${empresas.map((e) => (e === SIN_DATO ? "sin dato" : empresaDe(e))).join(", ")}` : "",
+      centros.length ? `CC ${centros.map((c) => (c === SIN_DATO ? "sin dato" : c)).join(", ")}` : "",
+      planta ? (planta === SIN_DATO ? "planta sin dato" : (PLANTA[planta] ?? planta).toLowerCase()) : "",
+      filtro ? `estado ${ESTADOS_ENVIO[filtro].texto.toLowerCase()}` : "",
+      texto.trim() ? `búsqueda «${texto.trim()}»` : "",
+    ];
+    return `las filtradas por ${partes.filter(Boolean).join(" · ")}`;
+  }
+
+  function marcar(ids: number[], si: boolean) {
+    setMarcas((m) => {
+      const nuevas = new Set(m);
+      for (const i of ids) {
+        if (si) nuevas.add(i);
+        else nuevas.delete(i);
+      }
+      return nuevas;
+    });
+  }
+
+  function cambiarEmpresas(valor: string[]) {
+    setEmpresas(valor);
+    // Quita los CC que ya no están en las razones sociales elegidas.
+    const quedan = new Set((valor.length ? detalle.filter((d) => valor.includes(d.sociedad || SIN_DATO)) : detalle).map((d) => d.centro_costo || SIN_DATO));
+    setCentros((c) => c.filter((v) => quedan.has(v)));
+  }
+
+  function limpiarFiltros() {
+    setEmpresas([]);
+    setCentros([]);
+    setPlanta("");
+    setFiltro("");
+    setTexto("");
+  }
 
   async function accion(nombre: string, cuerpo: Record<string, unknown>, exito: (r: Record<string, unknown>) => string) {
     setOcupado(nombre);
@@ -78,13 +211,37 @@ export function LoteEnvio({ id }: { id: number }) {
   async function accionFila(d: DetalleEnvio, que: "excluir" | "incluir" | "reenviar") {
     setOcupado(`${que}-${d.id}`);
     try {
-      await enviarJson(`/api/envios/${id}/detalle/${d.id}`, { accion: que });
+      if (que === "reenviar") await enviarJson(`/api/envios/${id}/detalle/${d.id}`, { accion: que });
+      else await enviarJson(`/api/envios/${id}/detalle`, { accion: que, ids: [d.id] });
       toast.success(que === "reenviar" ? `Reenviada a ${d.correo}.` : que === "excluir" ? `${d.nombre} no recibirá el correo.` : `${d.nombre} vuelve al envío.`);
       await mutate();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo completar.");
     } finally {
       setOcupado(null);
+    }
+  }
+
+  async function accionBloque(que: AccionExclusion) {
+    setOcupado(que);
+    try {
+      const r = await enviarJson<{ excluidos: number; incluidos: number }>(`/api/envios/${id}/detalle`, {
+        accion: que,
+        ids: objetivo.map((d) => d.id),
+        criterio: criterio(),
+      });
+      const partes = [
+        r.excluidos ? `${personas(r.excluidos)} ${r.excluidos === 1 ? "excluida" : "excluidas"}` : "",
+        r.incluidos ? `${personas(r.incluidos)} de vuelta en el envío` : "",
+      ].filter(Boolean);
+      toast.success(partes.length ? `${partes.join(" y ")}.` : "No había nada que cambiar.");
+      setMarcas(new Set());
+      await mutate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo completar.");
+    } finally {
+      setOcupado(null);
+      setConfirmandoBloque(null);
     }
   }
 
@@ -128,8 +285,8 @@ export function LoteEnvio({ id }: { id: number }) {
         {lote.estado === "por_aprobar" && (
           <>
             <p className="text-sm text-muted mr-auto max-w-xl">
-              Revisa la lista y excluye a quien no corresponda. Con «Enviar prueba» te llega a ti la liquidación de la primera persona, con su
-              clave, para ver cómo la recibirán.
+              Revisa la lista y excluye a quien no corresponda: filtra o marca personas para hacerlo de una vez. Con «Enviar prueba» te llega a ti
+              la liquidación de la primera persona, con su clave, para ver cómo la recibirán.
             </p>
             <button type="button" className="btn-flesan btn-flesan-ghost rounded-flesan" disabled={!!ocupado} onClick={() => prueba()}>
               <MailCheck className="w-4 h-4" aria-hidden /> {ocupado === "prueba" ? "Enviando…" : "Enviar prueba a mi correo"}
@@ -139,7 +296,7 @@ export function LoteEnvio({ id }: { id: number }) {
             </button>
             {confirmando ? (
               <span className="inline-flex flex-wrap items-center gap-2 text-sm text-text">
-                Se enviarán {aEnviar} correos. ¿Aprobar?
+                Se enviarán {miles(aEnviar)} correos{textoDesglose}. ¿Aprobar?
                 <button type="button" className="btn-flesan btn-flesan-primary rounded-flesan" disabled={!!ocupado} onClick={() => accion("aprobar", { accion: "aprobar" }, () => "Envío aprobado: los correos salen de a poco.")}>
                   {ocupado === "aprobar" ? "Aprobando…" : "Sí, aprobar y enviar"}
                 </button>
@@ -166,8 +323,17 @@ export function LoteEnvio({ id }: { id: number }) {
         )}
         {lote.estado === "pausado" && (
           <>
-            <p className="text-sm text-muted mr-auto">Envío pausado. Lo pendiente sale al reanudar.</p>
-            <button type="button" className="btn-flesan btn-flesan-primary rounded-flesan" disabled={!!ocupado} onClick={() => accion("reanudar", { accion: "reanudar" }, () => "Envío reanudado.")}>
+            <p className="text-sm text-muted mr-auto">
+              {lote.pendientes
+                ? "Envío pausado. Lo pendiente sale al reanudar; mientras tanto puedes excluir o volver a incluir a quienes aún no lo reciben."
+                : "Envío pausado. No queda nada pendiente: al reanudar, el envío queda terminado."}
+            </p>
+            <button
+              type="button"
+              className="btn-flesan btn-flesan-primary rounded-flesan"
+              disabled={!!ocupado}
+              onClick={() => accion("reanudar", { accion: "reanudar" }, (r) => (r.terminado ? "No quedaba nada pendiente: el envío quedó terminado." : "Envío reanudado."))}
+            >
               <Play className="w-4 h-4" aria-hidden /> Reanudar
             </button>
           </>
@@ -181,31 +347,113 @@ export function LoteEnvio({ id }: { id: number }) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {(["", "pendiente", "enviado", "error", "sin_correo", "excluido"] as const).map((e) => {
-          const n = e ? conteo(e) : detalle.length;
-          if (e && !n) return null;
-          return (
-            <button key={e || "todos"} type="button" onClick={() => setFiltro(e)} className={cn("chip-flesan", filtro === e && "is-active")}>
-              {e ? ESTADOS_ENVIO[e].texto : "Todos"} · {n}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Desplegable multiple variante="filtro" etiqueta="Razón social" textoTodos="Todas" valor={empresas} activo={empresas.length > 0} onCambio={cambiarEmpresas} opciones={opcionesEmpresa} />
+          <Desplegable multiple variante="filtro" etiqueta="Centro de costo" textoTodos="Todos" valor={centros} activo={centros.length > 0} onCambio={setCentros} opciones={opcionesCentro} />
+          <Desplegable variante="filtro" etiqueta="Planta" valor={planta} activo={!!planta} onCambio={setPlanta} opciones={[{ valor: "", texto: "Todas" }, ...opcionesPlanta]} />
+          {hayFiltro && (
+            <button type="button" onClick={limpiarFiltros} className="text-xs font-semibold text-muted hover:text-flesan-red cursor-pointer px-1">
+              Limpiar filtros
             </button>
-          );
-        })}
-        <label className="relative w-full sm:w-80 sm:ml-auto">
-          <span className="sr-only">Buscar persona</span>
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" aria-hidden />
-          <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Nombre, N° personal o correo…" className="field-input rounded-full! pl-10! w-full!" />
-        </label>
+          )}
+          <label className="relative w-full sm:w-80 sm:ml-auto">
+            <span className="sr-only">Buscar persona</span>
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" aria-hidden />
+            <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Nombre, N° personal, correo o CC…" className="field-input rounded-full! pl-10! w-full!" />
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {(["", "pendiente", "enviado", "error", "sin_correo", "excluido"] as const).map((e) => {
+            const n = e ? conteo(e) : porFiltros.length;
+            if (e && !n && filtro !== e) return null;
+            return (
+              <button key={e || "todos"} type="button" onClick={() => setFiltro(e)} className={cn("chip-flesan", filtro === e && "is-active")}>
+                {e ? ESTADOS_ENVIO[e].texto : "Todos"} · {miles(n)}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {editable && (
+        <div className="card dens-card flex flex-wrap items-center gap-2">
+          <p className="text-sm text-muted mr-auto">
+            {marcadas.length ? (
+              <>
+                <span className="font-semibold text-text">
+                  {personas(marcadas.length)} {marcadas.length === 1 ? "marcada" : "marcadas"}
+                </span>
+                {fueraDelFiltro > 0 && ` (${miles(fueraDelFiltro)} fuera del filtro actual)`} ·{" "}
+                <button type="button" onClick={() => setMarcas(new Set())} className="font-semibold hover:text-flesan-red cursor-pointer">
+                  Quitar marcas
+                </button>
+              </>
+            ) : hayFiltro ? (
+              <>
+                <span className="font-semibold text-text">{personas(objetivo.length)}</span> con el filtro
+                {fijas > 0 && ` (y ${miles(fijas)} que no se ${fijas === 1 ? "puede cambiar: sin correo, ya enviada" : "pueden cambiar: sin correo, ya enviadas"} o con error)`}. Marca casillas
+                para elegir a mano.
+              </>
+            ) : (
+              "Sin filtros ni marcas, las acciones aplican a todas. Filtra o marca personas para elegir."
+            )}
+          </p>
+          {confirmandoBloque ? (
+            <span className="inline-flex flex-wrap items-center gap-2 text-sm text-text">
+              {confirmacion[confirmandoBloque]} ¿Confirmar?
+              <button type="button" className="btn-flesan btn-flesan-primary rounded-flesan" disabled={!!ocupado} onClick={() => accionBloque(confirmandoBloque)}>
+                {ocupado === confirmandoBloque ? "Aplicando…" : "Sí, confirmar"}
+              </button>
+              <button type="button" className="btn-flesan btn-flesan-ghost rounded-flesan" onClick={() => setConfirmandoBloque(null)}>
+                No
+              </button>
+            </span>
+          ) : (
+            <>
+              <button type="button" className="btn-flesan btn-flesan-ghost rounded-flesan" disabled={!!ocupado || !nExcluir} onClick={() => setConfirmandoBloque("excluir")}>
+                <Ban className="w-4 h-4" aria-hidden /> Excluir ({miles(nExcluir)})
+              </button>
+              <button type="button" className="btn-flesan btn-flesan-ghost rounded-flesan" disabled={!!ocupado || !nIncluir} onClick={() => setConfirmandoBloque("incluir")}>
+                <Undo2 className="w-4 h-4" aria-hidden /> Incluir ({miles(nIncluir)})
+              </button>
+              {(marcadas.length > 0 || hayFiltro) && (
+                <button
+                  type="button"
+                  className="btn-flesan btn-flesan-ghost rounded-flesan"
+                  disabled={!!ocupado || !objetivo.length || (!nResto && !nIncluir)}
+                  onClick={() => setConfirmandoBloque("solo")}
+                  title="Deja por enviar solo a estas personas y excluye al resto"
+                >
+                  <ListChecks className="w-4 h-4" aria-hidden /> Dejar solo estas
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="card overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-2">
+                {editable && (
+                  <th scope="col" className="pl-4 pr-1 py-2.5 w-8 text-left">
+                    {filtradasMarcables.length > 0 && (
+                      <Casilla
+                        marcada={marcadasEnFiltro === filtradasMarcables.length}
+                        indeterminada={marcadasEnFiltro > 0 && marcadasEnFiltro < filtradasMarcables.length}
+                        onCambio={(v) => marcar(filtradasMarcables.map((d) => d.id), v)}
+                        etiqueta={`Marcar las ${filtradasMarcables.length} personas filtradas`}
+                      />
+                    )}
+                  </th>
+                )}
                 <Th>Nombre</Th>
                 <Th>N° personal</Th>
                 <Th>Empresa</Th>
+                <Th>Centro de costo</Th>
                 <Th>Correo</Th>
                 <Th>Liquidaciones</Th>
                 <Th>Estado</Th>
@@ -214,10 +462,33 @@ export function LoteEnvio({ id }: { id: number }) {
             </thead>
             <tbody className="divide-y divide-border">
               {visibles.map((d) => (
-                <tr key={d.id} className={cn("hover:bg-surface-2/60", d.estado === "excluido" && "opacity-60")}>
+                <tr key={d.id} className={cn("hover:bg-surface-2/60", d.estado === "excluido" && "opacity-60", marcas.has(d.id) && marcable(d) && "bg-flesan-red/5")}>
+                  {editable && (
+                    <td className="pl-4 pr-1 py-2">
+                      {marcable(d) && <Casilla marcada={marcas.has(d.id)} onCambio={(v) => marcar([d.id], v)} etiqueta={`Marcar a ${d.nombre}`} />}
+                    </td>
+                  )}
                   <td className="px-3 py-2 font-semibold text-text min-w-56">{d.nombre}</td>
                   <td className="px-3 py-2 text-muted tabular-nums">{d.numero_de_personal}</td>
-                  <td className="px-3 py-2 text-muted">{d.sociedad ?? "—"}</td>
+                  <td className="px-3 py-2 text-muted">
+                    <span className="block max-w-48 truncate" title={d.sociedad ? `${empresaDe(d.sociedad)} (${d.sociedad})` : undefined}>
+                      {empresaDe(d.sociedad)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-muted">
+                    {d.centro_costo ? (
+                      <>
+                        <span className="tabular-nums">{d.centro_costo}</span>
+                        {d.nombre_cc && (
+                          <span className="block text-xs text-faint max-w-56 truncate" title={d.nombre_cc}>
+                            {d.nombre_cc}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     {d.correo ? (
                       <span className="text-text">{d.correo}</span>
@@ -235,16 +506,16 @@ export function LoteEnvio({ id }: { id: number }) {
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     {lote.estado === "por_aprobar" && d.estado === "pendiente" && (
-                      <>
-                        <BotonFila onClick={() => prueba(d)} disabled={!!ocupado} titulo={`Enviarme la liquidación de ${d.nombre} como prueba`}>
-                          <MailCheck className="w-4 h-4" />
-                        </BotonFila>
-                        <BotonFila onClick={() => accionFila(d, "excluir")} disabled={!!ocupado} titulo={`Excluir a ${d.nombre}`}>
-                          <Ban className="w-4 h-4" />
-                        </BotonFila>
-                      </>
+                      <BotonFila onClick={() => prueba(d)} disabled={!!ocupado} titulo={`Enviarme la liquidación de ${d.nombre} como prueba`}>
+                        <MailCheck className="w-4 h-4" />
+                      </BotonFila>
                     )}
-                    {lote.estado === "por_aprobar" && d.estado === "excluido" && (
+                    {editable && d.estado === "pendiente" && (
+                      <BotonFila onClick={() => accionFila(d, "excluir")} disabled={!!ocupado} titulo={`Excluir a ${d.nombre}`}>
+                        <Ban className="w-4 h-4" />
+                      </BotonFila>
+                    )}
+                    {editable && d.estado === "excluido" && (
                       <BotonFila onClick={() => accionFila(d, "incluir")} disabled={!!ocupado} titulo={`Volver a incluir a ${d.nombre}`}>
                         <Undo2 className="w-4 h-4" />
                       </BotonFila>
@@ -259,7 +530,7 @@ export function LoteEnvio({ id }: { id: number }) {
               ))}
               {!visibles.length && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={editable ? 9 : 8} className="px-4 py-8 text-center text-muted">
                     Nadie coincide con el filtro.
                   </td>
                 </tr>

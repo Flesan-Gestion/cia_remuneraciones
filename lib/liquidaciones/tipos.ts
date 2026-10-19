@@ -71,6 +71,8 @@ export interface FilaVista {
 
 export type EstadoLote = "por_aprobar" | "enviando" | "pausado" | "enviado" | "cancelado";
 export type EstadoEnvio = "pendiente" | "enviando" | "enviado" | "error" | "sin_correo" | "excluido";
+/** Cambio en bloque sobre personas de un lote: «solo» deja por enviar únicamente a las elegidas. */
+export type AccionExclusion = "excluir" | "incluir" | "solo";
 
 export interface Lote {
   id: number;
@@ -96,6 +98,10 @@ export interface DetalleEnvio {
   numero_de_personal: string;
   nombre: string;
   sociedad: string | null;
+  /** CC y planta / no planta del maestro al preparar el lote (los lotes de antes del 2026-10-19 no los traen). */
+  centro_costo: string | null;
+  nombre_cc: string | null;
+  planta_noplanta: string | null;
   correo: string | null;
   origen_correo: "corporativo" | "personal" | null;
   liquidaciones: { periodo_para_nomina: string; periodo_efectivo: string }[];

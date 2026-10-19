@@ -105,6 +105,7 @@ export interface FilaListado {
   sociedad: string;
   centro_costo: string | null;
   planta_noplanta: string | null;
+  nombre_cc: string | null;
 }
 
 /** Arma el filtro «persona»: número de personal exacto (como el original), RUT o nombre. */
@@ -202,7 +203,7 @@ export async function listarLiquidaciones(f: Filtros, acceso: Acceso): Promise<F
   const sql = `SELECT l.apellido_nombre, l.numero_de_personal, l.periodo_para_nomina,
        CASE WHEN l.periodo_para_nomina = '000000' THEN REPLACE(l.marca, '-', '') ELSE l.periodo_para_nomina END AS periodo_efectivo,
        COALESCE(l.tipo_calculo_nomina_perpara, '') AS tipo_calculo,
-       l.sociedad, m.centro_costo, c.planta_noplanta
+       l.sociedad, m.centro_costo, c.planta_noplanta, MAX(m.nombre_centro_costo) AS nombre_cc
      FROM ${LIQ} l
      INNER JOIN flesan_rrhh.sap_tabla_paso_liquidaciones p ON p.cc_nimina_sap = l.cc_nomina
      LEFT JOIN flesan_rrhh.sap_maestro_colaborador m

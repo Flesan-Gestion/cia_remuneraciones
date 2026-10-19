@@ -74,6 +74,10 @@ y el detalle en lote (el antiguo hacía una consulta de ~1 s por persona).
   personal; 6 tienen un @flesan.cl en ese campo y 1 no tiene ninguno.
 - Administrador de la plataforma: solo martin.norambuena@flesan.cl (`CIA_ADMIN_EMAILS`).
 - Tope diario configurable (`ENVIO_MAX_DIA`, 1.500 por defecto) por el límite de Gmail.
+- Revisión con filtros de varias opciones (razón social, centro de costo, planta) y exclusión en
+  bloque: excluir, incluir o «dejar solo estas» sobre las marcadas o lo filtrado. Se puede excluir
+  o incluir también con el envío pausado, no solo antes de aprobar (2026-10-19). El CC y la planta
+  se fijan al preparar el lote (`db/009`).
 
 ## Queda fuera
 

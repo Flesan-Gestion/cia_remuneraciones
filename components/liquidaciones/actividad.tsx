@@ -50,8 +50,12 @@ function resumen(e: EventoActividad): string {
     case "Reenvió liquidación":
       return `${periodo}: ${d.nombre} (${d.np}) → ${d.para}${d.ok === false ? " · falló" : ""}`;
     case "Excluyó del envío":
-    case "Incluyó en el envío":
-      return `${periodo}: ${d.nombre} (${d.np})`;
+    case "Incluyó en el envío": {
+      // Desde el 2026-10-19 un registro puede traer varias personas (cambio en bloque); antes, una.
+      const personas = personasDe(e);
+      const quien = personas.length > 1 ? `${personas.length} personas` : personas.length ? `${personas[0].nombre} (${personas[0].np})` : `${d.nombre} (${d.np})`;
+      return `${periodo}: ${quien}${typeof d.criterio === "string" ? ` · ${d.criterio}` : ""}`;
+    }
     case "Cambió acceso": {
       const libros = "rol_remuneraciones" in d ? `, libros ${d.rol_remuneraciones ? etiquetaRolLibro(d.rol_remuneraciones as RolLibro) : "sin acceso"}` : "";
       return `${e.entidad_id}: rol ${d.rol}, perfil ${d.perfil}${Array.isArray(d.empresas) && d.empresas.length ? `, empresas ${d.empresas.join(", ")}` : ""}${libros}`;

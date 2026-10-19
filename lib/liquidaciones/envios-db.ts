@@ -1,5 +1,5 @@
 import { poolPlataforma, tablaPlataforma } from "@/lib/configuracion-db";
-import type { ConfiguracionEnvio, DetalleEnvio, EstadoLote, Lote } from "@/lib/liquidaciones/tipos";
+import type { AccionExclusion, ConfiguracionEnvio, DetalleEnvio, EstadoLote, Lote } from "@/lib/liquidaciones/tipos";
 
 /**
  * Tablas del envío por correo (esquema propio, db/004_liquidaciones.sql): configuración, lotes
@@ -75,6 +75,9 @@ export interface NuevaFilaEnvio {
   numero_de_personal: string;
   nombre: string;
   sociedad: string | null;
+  centro_costo: string | null;
+  nombre_cc: string | null;
+  planta_noplanta: string | null;
   correo: string | null;
   origen_correo: "corporativo" | "personal" | null;
   liquidaciones: { periodo_para_nomina: string; periodo_efectivo: string }[];
@@ -93,14 +96,20 @@ export async function crearLote(periodo: string, creadoPor: string, filas: Nueva
     for (let i = 0; i < filas.length; i += 500) {
       const parte = filas.slice(i, i + 500);
       await cliente.query(
-        `INSERT INTO ${DETALLE} (lote_id, numero_de_personal, nombre, sociedad, correo, origen_correo, liquidaciones, estado)
-         SELECT $1, f.np, f.nombre, f.soc, f.correo, f.origen, f.liq::jsonb, CASE WHEN f.correo IS NULL THEN 'sin_correo' ELSE 'pendiente' END
-         FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[]) AS f(np, nombre, soc, correo, origen, liq)`,
+        `INSERT INTO ${DETALLE} (lote_id, numero_de_personal, nombre, sociedad, centro_costo, nombre_cc, planta_noplanta, correo, origen_correo,
+           liquidaciones, estado)
+         SELECT $1, f.np, f.nombre, f.soc, f.cc, f.nombre_cc, f.planta, f.correo, f.origen, f.liq::jsonb,
+           CASE WHEN f.correo IS NULL THEN 'sin_correo' ELSE 'pendiente' END
+         FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
+           AS f(np, nombre, soc, cc, nombre_cc, planta, correo, origen, liq)`,
         [
           id,
           parte.map((f) => f.numero_de_personal),
           parte.map((f) => f.nombre),
           parte.map((f) => f.sociedad),
+          parte.map((f) => f.centro_costo),
+          parte.map((f) => f.nombre_cc),
+          parte.map((f) => f.planta_noplanta),
           parte.map((f) => f.correo),
           parte.map((f) => f.origen_correo),
           parte.map((f) => JSON.stringify(f.liquidaciones)),
@@ -132,36 +141,86 @@ export async function cambiarEstadoLote(id: number, desde: EstadoLote[], a: Esta
   return (rowCount ?? 0) > 0;
 }
 
+const COLUMNAS_DETALLE = `id::int AS id, numero_de_personal, nombre, sociedad, centro_costo, nombre_cc, planta_noplanta, correo,
+  origen_correo, liquidaciones, estado, intentos, ultimo_error, enviado_en`;
+
 export async function listarDetalle(loteId: number): Promise<DetalleEnvio[]> {
-  const { rows } = await base().query<DetalleEnvio>(
-    `SELECT id::int AS id, numero_de_personal, nombre, sociedad, correo, origen_correo, liquidaciones, estado, intentos,
-       ultimo_error, enviado_en
-     FROM ${DETALLE} WHERE lote_id = $1 ORDER BY nombre`,
-    [loteId],
-  );
+  const { rows } = await base().query<DetalleEnvio>(`SELECT ${COLUMNAS_DETALLE} FROM ${DETALLE} WHERE lote_id = $1 ORDER BY nombre`, [loteId]);
   return rows;
 }
 
 export async function leerFila(loteId: number, id: number): Promise<DetalleEnvio | null> {
-  const { rows } = await base().query<DetalleEnvio>(
-    `SELECT id::int AS id, numero_de_personal, nombre, sociedad, correo, origen_correo, liquidaciones, estado, intentos,
-       ultimo_error, enviado_en
-     FROM ${DETALLE} WHERE lote_id = $1 AND id = $2`,
-    [loteId, id],
-  );
+  const { rows } = await base().query<DetalleEnvio>(`SELECT ${COLUMNAS_DETALLE} FROM ${DETALLE} WHERE lote_id = $1 AND id = $2`, [loteId, id]);
   return rows[0] ?? null;
 }
 
-/** Excluir o volver a incluir a una persona; solo antes de aprobar el lote. */
-export async function cambiarExclusion(loteId: number, id: number, excluir: boolean) {
-  const { rowCount } = await base().query(
-    `UPDATE ${DETALLE} d SET estado = $3, actualizado_en = now()
-     FROM ${LOTES} l
-     WHERE d.lote_id = l.id AND l.id = $1 AND d.id = $2 AND l.estado = 'por_aprobar'
-       AND d.estado = $4`,
-    [loteId, id, excluir ? "excluido" : "pendiente", excluir ? "pendiente" : "excluido"],
-  );
-  return (rowCount ?? 0) > 0;
+/** Persona tocada por un cambio en bloque (va al registro de actividad). */
+export interface PersonaEnvio {
+  np: string;
+  nombre: string;
+}
+
+/**
+ * Excluye o vuelve a incluir personas del lote en una transacción, antes de aprobarlo o con el
+ * envío pausado. Solo cambia filas «pendiente» ↔ «excluido»: lo enviado, con error o sin correo no
+ * se toca. «solo» deja por enviar únicamente a `ids`: las incluye y excluye al resto de lo pendiente.
+ */
+export async function cambiarExclusiones(
+  loteId: number,
+  accion: AccionExclusion,
+  ids: number[],
+): Promise<{ excluidos: PersonaEnvio[]; incluidos: PersonaEnvio[] } | { error: string }> {
+  const cliente = await base().connect();
+  try {
+    await cliente.query("BEGIN");
+    // Bloquea el lote: nadie lo aprueba ni lo reanuda a mitad del cambio.
+    const { rows } = await cliente.query<{ estado: EstadoLote }>(`SELECT estado FROM ${LOTES} WHERE id = $1 FOR UPDATE`, [loteId]);
+    const estado = rows[0]?.estado;
+    let error: string | null = null;
+    if (estado !== "por_aprobar" && estado !== "pausado") {
+      error = "Solo se puede cambiar antes de aprobar el envío o con el envío pausado.";
+    } else if (estado === "pausado") {
+      // Recién pausado, el proceso termina los correos que ya tomó y devuelve el resto a «pendiente»:
+      // un cambio hecho antes de eso no alcanzaría a esas filas.
+      const { rowCount } = await cliente.query(`SELECT 1 FROM ${DETALLE} WHERE lote_id = $1 AND estado = 'enviando' LIMIT 1`, [loteId]);
+      if (rowCount) error = "Todavía están saliendo los últimos correos de antes de la pausa. Espera unos segundos y vuelve a intentar.";
+    }
+    if (error) {
+      await cliente.query("ROLLBACK");
+      return { error };
+    }
+
+    const persona = "numero_de_personal AS np, nombre";
+    const enIds = "id = ANY($2::bigint[])";
+    const incluidos =
+      accion === "excluir"
+        ? []
+        : (
+            await cliente.query<PersonaEnvio>(
+              `UPDATE ${DETALLE} SET estado = 'pendiente', actualizado_en = now()
+               WHERE lote_id = $1 AND ${enIds} AND estado = 'excluido' RETURNING ${persona}`,
+              [loteId, ids],
+            )
+          ).rows;
+    const excluidos =
+      accion === "incluir"
+        ? []
+        : (
+            await cliente.query<PersonaEnvio>(
+              `UPDATE ${DETALLE} SET estado = 'excluido', actualizado_en = now()
+               WHERE lote_id = $1 AND ${accion === "solo" ? `NOT (${enIds})` : enIds} AND estado = 'pendiente' RETURNING ${persona}`,
+              [loteId, ids],
+            )
+          ).rows;
+    await cliente.query("COMMIT");
+    const porNombre = (a: PersonaEnvio, b: PersonaEnvio) => a.nombre.localeCompare(b.nombre, "es");
+    return { excluidos: excluidos.sort(porNombre), incluidos: incluidos.sort(porNombre) };
+  } catch (e) {
+    await cliente.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    cliente.release();
+  }
 }
 
 // ---------------------------------------------------------------- envío
@@ -174,8 +233,7 @@ export async function reclamarPendientes(loteId: number, n: number): Promise<Det
        SELECT id FROM ${DETALLE} WHERE lote_id = $1 AND estado = 'pendiente'
        ORDER BY nombre LIMIT $2 FOR UPDATE SKIP LOCKED
      )
-     RETURNING id::int AS id, numero_de_personal, nombre, sociedad, correo, origen_correo, liquidaciones, estado, intentos,
-       ultimo_error, enviado_en`,
+     RETURNING ${COLUMNAS_DETALLE}`,
     [loteId, n],
   );
   return rows;
@@ -220,14 +278,15 @@ export async function lotesPorEnviar(): Promise<number[]> {
   return rows.map((r) => r.id);
 }
 
-/** Cierra el lote si ya no le queda nada pendiente ni en curso. */
+/** Cierra el lote si ya no le queda nada pendiente ni en curso. Devuelve si lo cerró. */
 export async function cerrarSiTermino(loteId: number) {
-  await base().query(
+  const { rowCount } = await base().query(
     `UPDATE ${LOTES} SET estado = 'enviado', terminado_en = now()
      WHERE id = $1 AND estado = 'enviando'
        AND NOT EXISTS (SELECT 1 FROM ${DETALLE} WHERE lote_id = $1 AND estado IN ('pendiente', 'enviando'))`,
     [loteId],
   );
+  return (rowCount ?? 0) > 0;
 }
 
 /** Vuelve a la cola las filas con error y reabre el lote. Devuelve cuántas. */

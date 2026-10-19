@@ -65,7 +65,17 @@ export async function prepararLote(periodo: string, creadoPor: string): Promise<
   for (const f of listado) {
     let fila = porPersona.get(f.numero_de_personal);
     if (!fila) {
-      fila = { numero_de_personal: f.numero_de_personal, nombre: f.apellido_nombre, sociedad: f.sociedad, correo: null, origen_correo: null, liquidaciones: [] };
+      fila = {
+        numero_de_personal: f.numero_de_personal,
+        nombre: f.apellido_nombre,
+        sociedad: f.sociedad,
+        centro_costo: f.centro_costo,
+        nombre_cc: f.nombre_cc,
+        planta_noplanta: f.planta_noplanta,
+        correo: null,
+        origen_correo: null,
+        liquidaciones: [],
+      };
       porPersona.set(f.numero_de_personal, fila);
     }
     if (!fila.liquidaciones.some((l) => l.periodo_para_nomina === f.periodo_para_nomina && l.periodo_efectivo === f.periodo_efectivo)) {

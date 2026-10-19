@@ -87,7 +87,8 @@ login CIA):
 | `/api/envios` | GET, POST | Solo RR.HH. — programación y lotes; preparar un lote a mano. |
 | `/api/envios/configuracion` | PUT | Solo RR.HH. — día del mes y si se prepara solo. |
 | `/api/envios/[id]` | GET, POST | Solo RR.HH. — un lote; aprobar, cancelar, pausar, reanudar, reintentar errores, prueba. |
-| `/api/envios/[id]/detalle/[detalleId]` | POST | Solo RR.HH. — excluir, incluir o reenviar a una persona. |
+| `/api/envios/[id]/detalle` | POST | Solo RR.HH. — excluir, incluir o dejar solo a una o varias personas (antes de aprobar o con el envío pausado). |
+| `/api/envios/[id]/detalle/[detalleId]` | POST | Solo RR.HH. — reenviar a una persona. |
 | `/api/configuracion/actividad` | GET | `adminOnly` — registro de actividad. |
 | `/api/libro/filtros` | GET | Rol en los libros, empresas y CC que puede elegir, y periodos. |
 | `/api/libro/excel` | POST | Excel del libro; calcula el alcance del rol en el servidor y registra la descarga. |
