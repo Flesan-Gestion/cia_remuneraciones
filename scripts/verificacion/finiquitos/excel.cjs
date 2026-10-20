@@ -20,6 +20,7 @@ const CONC = pares(bloque("$conceptos_posibles = ["));
 const FIN = pares(bloque("$col_fijas_fin = ["));
 const RES1 = pares(bloque("$columnas_resumen1 = ["));
 const RES2 = pares(bloque("$columnas_resumen2 = ["));
+const aPesos = (v) => { const n = Number(v); return Math.sign(n) * Math.round(Math.abs(n)) || 0; };
 const floatval = (v) => { const m = String(v ?? 0).replace(/[$. ]/g, "").match(/^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?/); return m ? Number(m[0]) : 0; };
 const binder = (v) => {
   if (v === null || v === undefined || v === "") return null;
@@ -37,7 +38,8 @@ function hojaPhp(titulo, emp, ccl, columnas, filas) {
     columnas.forEach(([k, , tipo], i) => {
       let v = r[k] ?? "";
       let fmt = null;
-      if (tipo === "concepto") { v = floatval(r[k] ?? 0); if (!k.includes("cantidad")) fmt = "#,##0"; }
+      // El imponible, redondeado a pesos (la plataforma corrige que PHP borraba el punto decimal; 2026-10-20).
+      if (tipo === "concepto") { v = k === "imponible" ? aPesos(r[k] ?? 0) : floatval(r[k] ?? 0); if (!k.includes("cantidad")) fmt = "#,##0"; }
       else if (tipo === "liquido") { v = floatval(v); fmt = "#,##0"; }
       else { if (k.includes("fecha") && !empty(v) && v !== "0000-00-00") v = fechaPhp(v); v = binder(v); }
       celdas[`${col(i + 2)}${9 + j}`] = { v, fmt };

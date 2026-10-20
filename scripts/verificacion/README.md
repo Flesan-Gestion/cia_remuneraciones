@@ -27,7 +27,8 @@ node finiquitos/excel.cjs <rol> <correo> <desde> <hasta> [empresa] [cc]
 Resultado esperado:
 
 - `verificar`: todo `OK` salvo rene.godoy@flesan.cl, que ve sus finiquitos por la mejora «correos
-  sin distinguir mayúsculas» (docs/DECISIONES.md).
+  sin distinguir mayúsculas» (docs/DECISIONES.md). El imponible del original se compara redondeado a
+  pesos, como lo entrega la plataforma desde el 2026-10-20 (`verificar` y `excel`).
 - `sintetico`: los dos casos de «CC repetido» salen como `DIFERENCIA` a propósito. El original
   duplica o triplica los montos y la plataforma cuenta a cada persona una vez (decisión aprobada).
 

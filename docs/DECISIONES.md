@@ -284,7 +284,8 @@ liquidaciones) se guarda una hora y el Excel se escribe por partes, como el del 
   sin formato de miles—, AMES y SEMANA), «RESUMEN FINIQUITOS» (una fila por persona, CC y semana, con
   el líquido a pago) y «RESUMEN OBRA» (el líquido a pago por empresa, CC y semana). En cada una: logo en
   A1:C3, título en A4, empresa y CC en A5:A6, encabezados grises en la fila 8 desde la columna B y
-  bordes finos. Se replican las conversiones de PHP (las horas extra pierden los decimales). Comparado
+  bordes finos. Se replican las conversiones de PHP (las horas extra pierden los decimales), salvo la
+  del imponible (decisión 4). Comparado
   celda a celda con lo que escribe el PHP en cinco casos (hasta 520 filas). El archivo se sigue
   llamando «Finiquito_remuneraciones.xlsx» (el nombre con que lo guardaba el navegador).
 
@@ -300,6 +301,9 @@ liquidaciones) se guarda una hora y el Excel se escribe por partes, como el del 
    10 del mes siguiente al de «hasta», como el libro prorrateado.
 3. Cada persona cuenta una vez: el original cruzaba con la tabla de encargados (49 CC repetidos, hasta
    tres veces) y multiplicaba los montos de quien tuviera uno de esos CC. Hoy no afecta a ningún finiquito.
+4. Imponible redondeado a pesos (2026-10-20): es el imponible del mes por los días / 30 y trae
+   decimales; el Excel del original los convertía borrando los puntos («102439.466666667» salía
+   102.439.466.666.667, y «100108.8», 1.001.088). En octubre de 2026 Semana 3 eran 42 de 71 personas.
 
 Por la mejora de los libros «correos sin distinguir mayúsculas», rene.godoy@flesan.cl (en mayúsculas en
 las tablas antiguas; en el PHP no tenía rol) ve los 4 finiquitos de la obra San Gerónimo I, donde es

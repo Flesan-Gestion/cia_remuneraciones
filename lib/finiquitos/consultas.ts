@@ -161,7 +161,9 @@ const DIAS = `sum(CASE WHEN f.texto_explcc_nomina = 'Horas en días calendario' 
 const DIAS_VACACIONES = `sum(CASE WHEN f.cc_nomina = '/IF2' THEN replace(f.cantidad, ',', '.')::double precision ELSE 0 END)`;
 const LIQUIDO = `sum(CASE WHEN f.cc_nomina = '/559' THEN f.importe::integer ELSE 0 END)`;
 
-/** Cada concepto con la misma expresión que el SELECT original. */
+/** Cada concepto con la misma expresión que el SELECT original, salvo el imponible: el original no lo
+ * redondeaba y su Excel borraba el punto decimal (102439.466666667 salía 102.439.466.666.667); va
+ * redondeado a pesos (decisión del 2026-10-20). */
 function columnaConcepto(c: ConceptoFiniquito): string {
   const en = c.codigos?.map((x) => `'${x}'`).join(", ");
   switch (c.tipo) {
@@ -172,7 +174,7 @@ function columnaConcepto(c: ConceptoFiniquito): string {
     case "costo_empresa":
       return "ce.valor";
     case "imponible":
-      return `(imp.imponible * ${DIAS}) / 30`;
+      return `round(((imp.imponible * ${DIAS}) / 30)::numeric)`;
   }
 }
 

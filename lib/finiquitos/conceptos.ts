@@ -6,7 +6,7 @@
  * - importe: suma de los importes de esos CC de nómina.
  * - horas: el mayor texto de la cantidad (horas extra); el original usaba max() sobre el texto.
  * - costo_empresa: costo empresa del mes y CC de la persona (tabla cc_nomina).
- * - imponible: imponible del mes con tope de 81,6 UF, por los días del finiquito / 30.
+ * - imponible: imponible del mes con tope de 81,6 UF, por los días del finiquito / 30, redondeado a pesos.
  */
 export type TipoConceptoFiniquito = "importe" | "horas" | "costo_empresa" | "imponible";
 

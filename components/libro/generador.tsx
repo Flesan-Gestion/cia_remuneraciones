@@ -164,7 +164,8 @@ function Contenido({ datos, rol, modulo }: { datos: DatosFiltros; rol: RolLibro;
       if (!r.ok) {
         const mensaje = (await r.json().catch(() => ({}))).error ?? "No se pudo generar el libro.";
         if (r.status === 404) {
-          toast(mensaje, { id: aviso });
+          // Con tipo propio: toast() a secas dejaba el aviso como «cargando» (girando y sin cerrarse).
+          toast.info(mensaje, { id: aviso });
           setDescarga(null);
           return;
         }

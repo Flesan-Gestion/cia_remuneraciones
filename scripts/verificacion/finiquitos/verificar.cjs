@@ -14,6 +14,8 @@ process.env.AUTH_DISABLED = "false";
 const { createJiti } = require(path.resolve("node_modules/jiti"));
 const jiti = createJiti(path.join(RAIZ, "x.js"), { alias: { "@": RAIZ } });
 const hora = () => new Date().toISOString().slice(11, 19);
+/** round(numeric) de Postgres: al peso más cercano, los empates lejos del cero. */
+const aPesos = (texto) => { const n = Number(texto); return String(Math.sign(n) * Math.round(Math.abs(n))); };
 
 (async () => {
   const { pool } = await jiti.import("./lib/db.ts");
@@ -66,7 +68,8 @@ const hora = () => new Date().toISOString().slice(11, 19);
       if (o.length !== n.length) malas.push(`${h}: original ${o.length} filas, nueva ${n.length}`);
       for (let i = 0; i < Math.min(o.length, n.length) && malas.length < 6; i++) {
         for (const clave of CLAVES[h]) {
-          const a = o[i][clave] ?? null;
+          // El imponible del original, redondeado a pesos como la plataforma (decisión del 2026-10-20).
+          const a = clave === "imponible" && o[i][clave] != null ? aPesos(o[i][clave]) : (o[i][clave] ?? null);
           const b = n[i][clave] ?? null;
           if (a !== b) {
             malas.push(`${h} fila ${i} (np ${o[i].np ?? ""}, ${o[i].cc}, ${o[i].ames} ${o[i].semana}) ${clave}: ${a} → ${b}`);
