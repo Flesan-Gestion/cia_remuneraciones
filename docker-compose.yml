@@ -1,12 +1,12 @@
 # ============================================================
-# Mockup Plataforma — docker-compose
+# Remuneraciones G2 (cia_remuneraciones) — docker-compose
 # Solo el servicio web. Si esta plataforma necesita Postgres u otro
 # servicio, agrégalo aquí y suma DATABASE_URL al .env (ver docs/ARQUITECTURA.md).
 # ============================================================
 
 services:
   web:
-    container_name: liquidaciones-sap
+    container_name: cia-remuneraciones
     build:
       context: .
       dockerfile: Dockerfile
