@@ -401,7 +401,10 @@ export function elegirParaPdf(permitidas: FilaListado[], pedidas: Set<string>) {
 // ---------------------------------------------------------------- detalle (query del PDF)
 
 export interface ConceptoLiquidacion {
+  /** CC-nómina de SAP: el PDF ordena los conceptos de cada sección por este código, como SAP. */
+  codigo: string;
   tipo: string;
+  /** El texto del concepto en SAP; si no trae, el de la tabla de paso. */
   descripcion: string;
   posicion: number;
   /** Texto tal como lo devuelve Postgres (el original imprimía el valor sin formatear). */
@@ -415,14 +418,21 @@ export interface LiquidacionDetalle extends ClaveLiquidacion {
   mes: string | null;
   rut: string | null;
   digito: string | null;
-  centro_costo: string | null;
-  nombre_cc: string | null;
   nombre_cargo: string | null;
   /** DD-MM-AAAA */
   fecha_ingreso: string | null;
-  lugar_trabajo: string | null;
   razon_social: string | null;
   rut_sociedad: string | null;
+  /** Texto de la división de personal en SAP («Metropolitana de Santiago»). */
+  ubicacion: string | null;
+  /** Nombre del CC en SAP (corto, 20 letras). */
+  nombre_cc: string | null;
+  /** Total imponible (/314) y renta afecta a impuesto (/T23) de SAP. */
+  total_imponible: number | null;
+  renta_afecta: number | null;
+  /** AFP y salud vigentes en el mes («AFP: Modelo», «FONASA»). */
+  afp: string | null;
+  salud: string | null;
   conceptos: ConceptoLiquidacion[];
 }
 
@@ -436,9 +446,10 @@ interface FilaDetalle extends ClaveLiquidacion, ConceptoLiquidacion {
 /**
  * Conceptos de cada liquidación pedida, con los datos del encabezado. Es la consulta por persona
  * de liquidaciones_pdf_new.php hecha para todas a la vez: el cargo es el vigente antes del inicio
- * del periodo (historial de eventos), se excluye el tipo de cálculo A y los conceptos van en el
- * orden de la tabla de paso. Devuelve las liquidaciones en el orden pedido; las que no tienen
- * conceptos no vienen (el original las saltaba).
+ * del periodo (historial de eventos) y se excluye el tipo de cálculo A. Desde el formato de SAP
+ * (2026-10-21) trae además el texto y el código SAP de cada concepto, los totales del encabezado, la
+ * ubicación, el CC como lo nombra SAP y la AFP y la salud del mes. Devuelve las liquidaciones en el
+ * orden pedido; las que no tienen conceptos no vienen (el original las saltaba).
  */
 export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promise<LiquidacionDetalle[]> {
   if (!pedidos.length) return [];
@@ -457,15 +468,43 @@ export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promis
      ),
      base AS (
        SELECT DISTINCT ON (np, pe) np, pe, jobcode FROM cambios ORDER BY np, pe, cambio_fecha DESC
+     ),
+     -- Del encabezado de SAP, en las mismas filas de la liquidación: total imponible (/314), renta
+     -- afecta a impuesto (/T23), la división de personal (la «Ubicación») y el nombre corto del CC.
+     sap AS (
+       SELECT p.np, p.pn, p.pe,
+         SUM(CASE WHEN l.cc_nomina = '/314' THEN l.importe::numeric END) AS total_imponible,
+         SUM(CASE WHEN l.cc_nomina = '/T23' THEN l.importe::numeric END) AS renta_afecta,
+         MAX(l.texto_division_de_personal) AS ubicacion,
+         MAX(l.denominacion) AS nombre_cc
+       FROM pedidos p
+       JOIN liq l
+         ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
+       WHERE l.tipo_calculo_nomina_perpara <> 'A'
+       GROUP BY p.np, p.pn, p.pe
+     ),
+     -- AFP (plan 0001) y salud (0002) del mes: la de fecha_desde más reciente hasta el último día del
+     -- mes. Si todas empiezan después, la más antigua: la tabla trae lo vigente al cargarla, y casi
+     -- todas las AFP parten el 01-08-2026 (sin esto, ningún mes anterior tendría AFP).
+     prevision AS (
+       SELECT DISTINCT ON (q.np, q.pe, x.plan) q.np, q.pe, x.plan, x.institucion
+       FROM (SELECT DISTINCT np, pe, (to_date(pe, 'YYYYMM') + interval '1 month')::date AS fin FROM pedidos) q
+       JOIN flesan_rrhh.xls_prevision_colaborador_g2 x ON ltrim(x.np, '0') = ltrim(q.np, '0') AND x.plan IN ('0001', '0002')
+       ORDER BY q.np, q.pe, x.plan,
+         (x.fecha_desde < q.fin) DESC NULLS LAST,
+         CASE WHEN x.fecha_desde < q.fin THEN x.fecha_desde END DESC NULLS LAST,
+         x.fecha_desde, x.modificado_el DESC NULLS LAST, x.version DESC NULLS LAST
      )
      -- El encabezado se repite en cada concepto: viaja solo en la primera fila de cada liquidación.
-     SELECT numero_de_personal, periodo_para_nomina, periodo_efectivo, tipo, descripcion, posicion, cantidad, importe,
-       CASE WHEN row_number() OVER (PARTITION BY numero_de_personal, periodo_para_nomina, periodo_efectivo ORDER BY posicion, descripcion) = 1
+     SELECT d.numero_de_personal, d.periodo_para_nomina, d.periodo_efectivo, d.codigo, d.tipo, d.descripcion, d.posicion,
+       d.cantidad, d.importe,
+       CASE WHEN row_number() OVER (PARTITION BY d.numero_de_personal, d.periodo_para_nomina, d.periodo_efectivo ORDER BY d.posicion, d.descripcion) = 1
          THEN json_build_object(
-           'nombre_completo', nombre_completo, 'anio', anio, 'mes', mes, 'rut', rut, 'digito', digito,
-           'centro_costo', centro_costo, 'nombre_cc', nombre_cc, 'nombre_cargo', nombre_cargo,
-           'fecha_ingreso', fecha_ingreso, 'lugar_trabajo', lugar_trabajo, 'razon_social', razon_social,
-           'rut_sociedad', rut_sociedad)
+           'nombre_completo', d.nombre_completo, 'anio', d.anio, 'mes', d.mes, 'rut', d.rut, 'digito', d.digito,
+           'nombre_cargo', d.nombre_cargo, 'fecha_ingreso', d.fecha_ingreso, 'razon_social', d.razon_social,
+           'rut_sociedad', d.rut_sociedad, 'ubicacion', s.ubicacion, 'nombre_cc', s.nombre_cc,
+           'total_imponible', s.total_imponible, 'renta_afecta', s.renta_afecta, 'afp', afp.institucion,
+           'salud', salud.institucion)
        END AS encabezado
      FROM (
      SELECT p.np AS numero_de_personal, p.pn AS periodo_para_nomina, p.pe AS periodo_efectivo,
@@ -482,8 +521,6 @@ export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promis
          ELSE SUBSTRING(m.national_id, 1, 8)::integer
        END::text AS rut,
        SUBSTRING(m.national_id, 10, 1) AS digito,
-       m.centro_costo,
-       e.nombre_cc,
        c.nombre_cargo,
        SUM(REPLACE(l.cantidad, ',', '.')::double precision)::text AS cantidad,
        SUM(l.importe::integer)::text AS importe,
@@ -493,38 +530,38 @@ export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promis
              THEN CAST(to_timestamp(SUBSTRING(m.fecha_ingreso, 1, 9)::bigint) + CAST('1 days' AS INTERVAL) AS DATE)
            ELSE CAST(to_timestamp(SUBSTRING(m.fecha_ingreso, 1, 10)::bigint) + CAST('1 days' AS INTERVAL) AS DATE)
          END, 'DD-MM-YYYY') AS fecha_ingreso,
-       u.nombre AS lugar_trabajo,
        r.razon_social,
        r.rut AS rut_sociedad,
-       t.tipo, t.descripcion, t.posicion
+       t.cc_nimina_sap AS codigo, t.tipo, COALESCE(NULLIF(MAX(l.texto_explcc_nomina), ''), t.descripcion) AS descripcion, t.posicion
      FROM pedidos p
      JOIN liq l
        ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
      LEFT JOIN flesan_rrhh.sap_maestro_colaborador m
        ON m.user_id = l.numero_de_personal::integer AND m.empresa = l.sociedad
-     LEFT JOIN flesan_rrhh.sap_maestro_empresa_dep_un_cc e ON e.external_code_cc = m.centro_costo
      LEFT JOIN base ON base.np = p.np AND base.pe = p.pe
      LEFT JOIN flesan_rrhh.sap_maestro_cargos c ON c.external_code = base.jobcode
-     LEFT JOIN flesan_rrhh.sap_maestro_ubicacion u ON u.external_code = m.ubicacion
      LEFT JOIN public.maestro_rut r ON r.id_sap = m.empresa
      LEFT JOIN flesan_rrhh.sap_tabla_paso_liquidaciones t ON t.cc_nimina_sap = l.cc_nomina
      WHERE t.tipo IS NOT NULL AND l.tipo_calculo_nomina_perpara <> 'A'
-     GROUP BY p.np, p.pn, p.pe, nombre_completo, m.national_id, m.centro_costo, e.nombre_cc, c.nombre_cargo,
-       m.fecha_ingreso, u.nombre, r.razon_social, r.rut, t.tipo, t.descripcion, t.posicion
+     GROUP BY p.np, p.pn, p.pe, nombre_completo, m.national_id, c.nombre_cargo,
+       m.fecha_ingreso, r.razon_social, r.rut, t.cc_nimina_sap, t.tipo, t.descripcion, t.posicion
      ) d
-     ORDER BY numero_de_personal, periodo_para_nomina, periodo_efectivo, posicion, descripcion`,
+     LEFT JOIN sap s ON s.np = d.numero_de_personal AND s.pn = d.periodo_para_nomina AND s.pe = d.periodo_efectivo
+     LEFT JOIN prevision afp ON afp.np = d.numero_de_personal AND afp.pe = d.periodo_efectivo AND afp.plan = '0001'
+     LEFT JOIN prevision salud ON salud.np = d.numero_de_personal AND salud.pe = d.periodo_efectivo AND salud.plan = '0002'
+     ORDER BY d.numero_de_personal, d.periodo_para_nomina, d.periodo_efectivo, d.posicion, d.descripcion`,
     arreglos(pedidos),
   );
 
   const porClave = new Map<string, LiquidacionDetalle>();
-  for (const { tipo, descripcion, posicion, cantidad, importe, encabezado, ...clave } of rows) {
+  for (const { codigo, tipo, descripcion, posicion, cantidad, importe, encabezado, ...clave } of rows) {
     let liquidacion = porClave.get(claveDe(clave));
     if (!liquidacion) {
       if (!encabezado) continue;
       liquidacion = { ...clave, ...encabezado, conceptos: [] };
       porClave.set(claveDe(clave), liquidacion);
     }
-    liquidacion.conceptos.push({ tipo: String(tipo).trim(), descripcion, posicion: Number(posicion), cantidad, importe });
+    liquidacion.conceptos.push({ codigo, tipo: String(tipo).trim(), descripcion, posicion: Number(posicion), cantidad, importe });
   }
   const vistos = new Set<string>();
   const ordenadas: LiquidacionDetalle[] = [];

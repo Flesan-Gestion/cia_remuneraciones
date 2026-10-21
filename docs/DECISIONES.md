@@ -44,14 +44,10 @@ Despliegue:   VM servidor_flesan (puerto por definir) · ENVIO_HABILITADO=true s
   - 2026-10-06: las empresas asignadas a una jefatura (`usuarios.empresas`) dan acceso real: ve todas
     las liquidaciones de esas empresas (nunca NFG) y filtra planta/no planta. En el PHP esa rama existía
     pero no se ejecutaba (solo cambiaba la lista de CC y los resultados salían vacíos fuera de sus CC).
-- PDF: mismas coordenadas, textos y cálculos que `liquidaciones_pdf_new.php`. La letra Calibri
-  del título se reemplaza por Carlito (mismas métricas, licencia OFL). Comparado el 2026-10-06
-  con un PDF del sistema antiguo (NP 112791, septiembre 2026): las 944 letras quedan en la misma
-  posición (diferencia < 0,01 pt). Dos detalles del antiguo que se replican a propósito: el PHP
-  corre en PHP 7, donde `MultiCell(..., 0)` alinea a la derecha (`0 == 'R'`), y FPDF no aplica
-  kerning.
-- Se mantiene la dirección fija «Avenida Apoquindo # 6550 P. 10 LAS CONDES» y la ausencia de la
-  leyenda «preliminar» (su condición estaba amarrada a 2022 y ya no se cumplía).
+- PDF: hasta el 2026-10-21, con las mismas coordenadas, textos y cálculos que
+  `liquidaciones_pdf_new.php`; desde entonces, con el formato de la liquidación de SAP (ver «PDF con
+  el formato de SAP»). Sin la leyenda «preliminar» del antiguo (su condición estaba amarrada a 2022
+  y ya no se cumplía).
 
 ## Mejoras aprobadas (2026-10-05)
 
@@ -92,6 +88,37 @@ y el detalle en lote (el antiguo hacía una consulta de ~1 s por persona).
   2026, una con sobregiro y cotización voluntaria, sin total). Esas se muestran como
   normales, sin etiqueta (la etiqueta «Fuera de ciclo» se quitó).
 - El PDF no cambia de formato: solo el total a pagar de la reliquidación.
+
+## PDF con el formato de SAP (2026-10-21)
+
+- Idéntico a una liquidación de SAP (Consorcio Minero, septiembre 2026, impresa desde el visor de
+  Firefox): A4, bordes de 0,75 pt, encabezado del detalle gris y las letras de la de ejemplo,
+  incrustadas: Courier New, Courier New Bold y Arial Bold. Sin incrustar, cada visor ponía su propia
+  Courier y la negrita se veía más delgada. Comparado con ella: el texto queda en la misma posición
+  (diferencia ≤ 0,05 pt), las líneas coinciden (4 píxeles distintos a 288 dpi) y la negrita tiene la
+  misma tinta (±1 %). Se quitó la certificación de recepción y la firma del beneficiario.
+- Las tres fuentes están en `lib/liquidaciones/fuentes`, copiadas de Windows (`C:\Windows\Fonts`).
+  Permiten incrustarse en documentos (fsType 8), pero no son de licencia libre como las demás del
+  proyecto (Barlow, OFL): son de Microsoft y vienen con Windows.
+- Datos nuevos: Total Imponible (/314), Renta A.Impuesto (/T23), Horas Extra (cantidad de las
+  posiciones 118, 130 y 137), AFP y salud, y al pie Alcance Liquido (haberes menos descuentos
+  legales), Descuentos (-) y Total a Pagar. Como en SAP, «Descuentos (-)» muestra todos los
+  descuentos, aunque del alcance al total solo se restan los que no son legales.
+- AFP (plan 0001) y salud (0002) de `xls_prevision_colaborador_g2`: la de `fecha_desde` más reciente
+  hasta el último día del mes de la liquidación, así un cambio de AFP en junio sale desde la de junio.
+  Si todas empiezan después del mes, la más antigua: la tabla trae lo vigente al cargarla y casi todas
+  las AFP parten el 01-08-2026, así que sin esto ningún mes anterior tendría AFP. La AFP se muestra
+  sin «AFP: » («Modelo»); la salud, tal cual («FONASA», «ISAPRE Consalud»).
+- Como SAP: textos de los conceptos de SAP (`texto_explcc_nomina`, «Gratificación legal», «Fondo
+  pensiones») y no los de la tabla de paso; dentro de cada sección, orden por código del concepto;
+  Ubicación = división de personal; C.de Costos = nombre corto del CC (20 letras); empresa en
+  mayúsculas; Código con 8 dígitos; fecha de ingreso «16-Junio-2026»; dirección fija «Avda. Apoquindo
+  # 6550 P.10 Las Condes»; conceptos de haberes imponibles pegados al borde y los demás con un espacio.
+- Supuestos sin un ejemplo de SAP: la asignación familiar va en su sección «Asignación Familiar»,
+  tras los haberes no imponibles; las horas extra ya no se repiten junto al concepto («- Hrs»).
+- Septiembre 2026: las 1.849 liquidaciones traen los mismos conceptos y montos que con el formato
+  anterior; ninguna queda sin AFP ni salud. El mes completo tarda ~11 s (antes ~8 s); una persona,
+  lo mismo que antes.
 
 ## Queda fuera
 
