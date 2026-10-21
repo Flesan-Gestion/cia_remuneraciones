@@ -61,6 +61,10 @@ const PIE = 813;
 /** Posiciones de horas extra (tabla de paso): su cantidad es la de «Horas Extra». */
 const POSICIONES_HORAS = new Set([118, 130, 137]);
 
+/** Descuentos legales que SAP no resta al calcular el Alcance Liquido: adicional de Isapre no
+ * deducible, cotización voluntaria AFP, APV y APV exento (comparado con liquidaciones de SAP). */
+const FUERA_DEL_ALCANCE = new Set(["/302", "MD04", "MD10", "MD11"]);
+
 /** Secciones del detalle, por tipo de la tabla de paso. En SAP los haberes imponibles van pegados al
  * borde y los conceptos de las demás secciones con un espacio al inicio. */
 const SECCIONES: { tipo: string; titulo: string; sangria: string; derecha: number }[] = [
@@ -208,9 +212,10 @@ function dibujarLiquidacion(doc: Doc, d: LiquidacionDetalle) {
 
   // Resumen. Como en SAP, «Descuentos (-)» muestra todos los descuentos, aunque del alcance líquido
   // al total a pagar solo se restan los que no son legales.
+  const voluntarios = suma(deTipo("3").filter((c) => FUERA_DEL_ALCANCE.has(c.codigo)), (c) => c.importe);
   const yResumen = yTotales + FILA_TOTALES;
   const filasResumen: [string, number][] = [
-    ["Alcance Liquido", totalHaberes - descuentosLegales],
+    ["Alcance Liquido", totalHaberes - descuentosLegales + voluntarios],
     ["Descuentos (-)", totalDescuentos],
     ["Total a Pagar", liquido],
   ];

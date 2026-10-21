@@ -102,7 +102,8 @@ y el detalle en lote (el antiguo hacía una consulta de ~1 s por persona).
   proyecto (Barlow, OFL): son de Microsoft y vienen con Windows.
 - Datos nuevos: Total Imponible (/314), Renta A.Impuesto (/T23), Horas Extra (cantidad de las
   posiciones 118, 130 y 137), AFP y salud, y al pie Alcance Liquido (haberes menos descuentos
-  legales), Descuentos (-) y Total a Pagar. Como en SAP, «Descuentos (-)» muestra todos los
+  legales, sin contar /302, MD04, MD10 ni MD11, como SAP: cuadra con 5 liquidaciones de SAP de
+  septiembre 2026), Descuentos (-) y Total a Pagar. Como en SAP, «Descuentos (-)» muestra todos los
   descuentos, aunque del alcance al total solo se restan los que no son legales.
 - AFP (plan 0001) y salud (0002) de `xls_prevision_colaborador_g2`: la de `fecha_desde` más reciente
   hasta el último día del mes de la liquidación, así un cambio de AFP en junio sale desde la de junio.
