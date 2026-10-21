@@ -1,5 +1,5 @@
 import { poolPlataforma, tablaPlataforma } from "@/lib/configuracion-db";
-import type { AccionExclusion, ConfiguracionEnvio, DetalleEnvio, EstadoLote, Lote } from "@/lib/liquidaciones/tipos";
+import type { AccionExclusion, ConfiguracionEnvio, DetalleEnvio, EstadoLote, LiquidacionEnvio, Lote } from "@/lib/liquidaciones/tipos";
 
 /**
  * Tablas del envío por correo (esquema propio, db/004_liquidaciones.sql): configuración, lotes
@@ -80,7 +80,7 @@ export interface NuevaFilaEnvio {
   planta_noplanta: string | null;
   correo: string | null;
   origen_correo: "corporativo" | "personal" | null;
-  liquidaciones: { periodo_para_nomina: string; periodo_efectivo: string }[];
+  liquidaciones: LiquidacionEnvio[];
 }
 
 /** Crea el lote con sus filas en una transacción. Las personas sin correo quedan «sin_correo». */

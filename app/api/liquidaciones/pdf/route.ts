@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { registrarActividad } from "@/lib/actividad-db";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
-import { claveDe, detallarLiquidaciones, listarLiquidaciones } from "@/lib/liquidaciones/consultas";
+import { detallarLiquidaciones, elegirParaPdf, listarLiquidaciones, sumarReliquidaciones } from "@/lib/liquidaciones/consultas";
 import { generarPdf } from "@/lib/liquidaciones/pdf";
 import { leerFiltros } from "@/lib/liquidaciones/validar";
 
@@ -23,17 +23,11 @@ export async function POST(request: Request) {
   if (!pedidas.size) return NextResponse.json({ error: "Elige al menos una liquidación." }, { status: 400 });
 
   try {
-    const permitidas = await listarLiquidaciones(filtros, sesion.acceso);
-    const vistas = new Set<string>();
-    const elegidas = permitidas.filter((l) => {
-      const clave = claveDe(l);
-      if (!pedidas.has(clave) || vistas.has(clave)) return false;
-      vistas.add(clave);
-      return true;
-    });
+    // Una reliquidación se pide por la clave de la normal y sale en una página con su fuera de ciclo sumada.
+    const { elegidas, pedidos } = elegirParaPdf(await listarLiquidaciones(filtros, sesion.acceso), pedidas);
     if (!elegidas.length) return NextResponse.json({ error: "Sin resultados para esos filtros." }, { status: 404 });
 
-    const detalle = await detallarLiquidaciones(elegidas);
+    const detalle = sumarReliquidaciones(await detallarLiquidaciones(pedidos));
     const registrado = await registrarActividad({
       correo: sesion.email,
       accion: "Descargó liquidaciones",

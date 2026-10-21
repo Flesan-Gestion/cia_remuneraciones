@@ -1,6 +1,13 @@
 import { sendEmailDetallado } from "@/lib/mailer";
 import { registrarActividad } from "@/lib/actividad-db";
-import { contactosColaboradores, detallarLiquidaciones, listarLiquidaciones, type ClaveLiquidacion, type ContactoColaborador } from "@/lib/liquidaciones/consultas";
+import {
+  contactosColaboradores,
+  detallarLiquidaciones,
+  listarLiquidaciones,
+  sumarReliquidaciones,
+  type ClaveLiquidacion,
+  type ContactoColaborador,
+} from "@/lib/liquidaciones/consultas";
 import { generarPdf } from "@/lib/liquidaciones/pdf";
 import { correoLiquidacion, correoLoteListo, nombrePila } from "@/lib/liquidaciones/correo";
 import { periodoLegible } from "@/lib/liquidaciones/formato";
@@ -79,7 +86,12 @@ export async function prepararLote(periodo: string, creadoPor: string): Promise<
       porPersona.set(f.numero_de_personal, fila);
     }
     if (!fila.liquidaciones.some((l) => l.periodo_para_nomina === f.periodo_para_nomina && l.periodo_efectivo === f.periodo_efectivo)) {
-      fila.liquidaciones.push({ periodo_para_nomina: f.periodo_para_nomina, periodo_efectivo: f.periodo_efectivo });
+      fila.liquidaciones.push({
+        periodo_para_nomina: f.periodo_para_nomina,
+        periodo_efectivo: f.periodo_efectivo,
+        // Para mostrar si se suma a la normal (reliquidación); el PDF lo vuelve a ver con los conceptos.
+        ...(f.periodo_para_nomina === "000000" && { solo_total: Boolean(f.solo_total) }),
+      });
     }
   }
   const filas = [...porPersona.values()];
@@ -134,7 +146,8 @@ async function enviarFila(
 }
 
 async function detallesPorPersona(filas: DetalleEnvio[]) {
-  const detalle = await detallarLiquidaciones(pedidosDe(filas));
+  // Cada reliquidación va en una sola página, con el total de la normal y su fuera de ciclo sumados.
+  const detalle = sumarReliquidaciones(await detallarLiquidaciones(pedidosDe(filas)));
   const mapa = new Map<string, typeof detalle>();
   for (const d of detalle) {
     const lista = mapa.get(d.numero_de_personal) ?? [];

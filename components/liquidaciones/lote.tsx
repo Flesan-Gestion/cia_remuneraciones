@@ -8,7 +8,7 @@ import { ArrowLeft, Ban, ListChecks, MailCheck, Pause, Play, RotateCcw, Search, 
 import { cn } from "@/lib/cn";
 import { Desplegable, type OpcionDesplegable } from "@/components/desplegable";
 import { miles, normalizar, periodoLegible } from "@/lib/liquidaciones/formato";
-import type { AccionExclusion, DetalleEnvio, Empresa, EstadoEnvio, Lote } from "@/lib/liquidaciones/tipos";
+import { ETIQUETA_LIQUIDACION, tiposEnvio, type AccionExclusion, type DetalleEnvio, type Empresa, type EstadoEnvio, type Lote } from "@/lib/liquidaciones/tipos";
 import { Casilla, enviarJson, Estado, fechaHoraCorta, fetcher, Nota, Paginacion, Th, type Tono } from "@/components/liquidaciones/ui";
 import { ESTADOS_LOTE } from "@/components/liquidaciones/envios";
 
@@ -497,7 +497,7 @@ export function LoteEnvio({ id }: { id: number }) {
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted whitespace-nowrap">
-                    {d.liquidaciones.map((l) => (l.periodo_para_nomina === "000000" ? "Fuera de ciclo" : "Normal")).join(" + ")}
+                    {tiposEnvio(d.liquidaciones).map((t) => ETIQUETA_LIQUIDACION[t]).join(" + ")}
                   </td>
                   <td className="px-3 py-2">
                     <Estado tono={ESTADOS_ENVIO[d.estado].tono}>{ESTADOS_ENVIO[d.estado].texto}</Estado>

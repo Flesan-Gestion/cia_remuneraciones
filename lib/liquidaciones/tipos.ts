@@ -52,6 +52,43 @@ export interface Filtros {
   planta: "PL" | "NP" | null;
 }
 
+/**
+ * Cómo se muestra una liquidación (2026-10-21):
+ * - reliquidación: la normal con su fuera de ciclo del mismo mes ya sumada. Esa fuera de ciclo solo
+ *   trae el total a pagar (posición 800) y el detalle de la normal ya la incluye: con los dos totales
+ *   sumados, cuadra. Va como una sola liquidación.
+ * - normal: todas las demás, también la fuera de ciclo que no se suma a una normal (finiquitos, o una
+ *   que trae su propio detalle): va sin etiqueta.
+ */
+export type TipoLiquidacion = "normal" | "reliquidacion";
+
+export const ETIQUETA_LIQUIDACION: Record<TipoLiquidacion, string> = {
+  normal: "Normal",
+  reliquidacion: "Reliquidación",
+};
+
+/** Una liquidación de una persona en un envío por correo. */
+export interface LiquidacionEnvio {
+  periodo_para_nomina: string;
+  periodo_efectivo: string;
+  /** Solo fuera de ciclo: si solo trae el total a pagar (se suma a la normal del mismo mes). Los lotes
+   * preparados antes del 2026-10-21 no lo traen. */
+  solo_total?: boolean;
+}
+
+/** Las liquidaciones de una persona en un envío, como salen en su PDF: la fuera de ciclo que solo trae el
+ * total va sumada a la normal del mismo mes. En los lotes sin «solo_total» se asume que se suma, como
+ * pasa en casi todos los casos (el PDF lo decide al enviar, con los conceptos). */
+export function tiposEnvio(liquidaciones: LiquidacionEnvio[]): TipoLiquidacion[] {
+  const fueraDeCiclo = (l: LiquidacionEnvio) => l.periodo_para_nomina === "000000";
+  const normales = new Set(liquidaciones.filter((l) => !fueraDeCiclo(l)).map((l) => l.periodo_efectivo));
+  const sumadas = new Set(liquidaciones.filter((l) => fueraDeCiclo(l) && l.solo_total !== false && normales.has(l.periodo_efectivo)).map((l) => l.periodo_efectivo));
+  return liquidaciones.flatMap((l): TipoLiquidacion[] => {
+    if (!fueraDeCiclo(l)) return [sumadas.has(l.periodo_efectivo) ? "reliquidacion" : "normal"];
+    return sumadas.has(l.periodo_efectivo) ? [] : ["normal"];
+  });
+}
+
 /** Una liquidación encontrada, para la vista previa. */
 export interface FilaVista {
   /** numero_de_personal|periodo_para_nomina|periodo_efectivo */
@@ -64,8 +101,7 @@ export interface FilaVista {
   nombre_cc: string | null;
   periodo_para_nomina: string;
   periodo_efectivo: string;
-  /** Normal o fuera de ciclo (periodo 000000, tipo de cálculo B). */
-  fuera_de_ciclo: boolean;
+  tipo: TipoLiquidacion;
   liquido: number | null;
 }
 
@@ -104,7 +140,7 @@ export interface DetalleEnvio {
   planta_noplanta: string | null;
   correo: string | null;
   origen_correo: "corporativo" | "personal" | null;
-  liquidaciones: { periodo_para_nomina: string; periodo_efectivo: string }[];
+  liquidaciones: LiquidacionEnvio[];
   estado: EstadoEnvio;
   intentos: number;
   ultimo_error: string | null;

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Download, FileText, Loader2, Lock, Search } from "lucide-react";
 import { Desplegable } from "@/components/desplegable";
 import { formatearRut, normalizar, periodoLegible, pesos } from "@/lib/liquidaciones/formato";
-import { etiquetaPerfil, type Empresa, type FilaVista, type Filtros, type Perfil } from "@/lib/liquidaciones/tipos";
+import { ETIQUETA_LIQUIDACION, etiquetaPerfil, type Empresa, type FilaVista, type Filtros, type Perfil } from "@/lib/liquidaciones/tipos";
 import { Campo, Casilla, EncabezadoTarjeta, enviarJson, Estado, fetcher, Nota, Paginacion, Th } from "@/components/liquidaciones/ui";
 
 interface DatosFiltros {
@@ -133,7 +133,9 @@ function Contenido({ datos }: { datos: DatosFiltros }) {
     const palabras = normalizar(texto).split(/\s+/).filter(Boolean);
     if (!palabras.length) return filas;
     return filas.filter((f) => {
-      const t = normalizar(`${f.nombre} ${f.numero_de_personal} ${f.rut ?? ""} ${formatearRut(f.rut)} ${f.centro_costo ?? ""} ${f.nombre_cc ?? ""}`);
+      const t = normalizar(
+        `${f.nombre} ${f.numero_de_personal} ${f.rut ?? ""} ${formatearRut(f.rut)} ${f.centro_costo ?? ""} ${f.nombre_cc ?? ""} ${f.tipo === "normal" ? "" : ETIQUETA_LIQUIDACION[f.tipo]}`,
+      );
       return palabras.every((p) => t.includes(p));
     });
   }, [resultado, texto]);
@@ -349,9 +351,9 @@ function Contenido({ datos }: { datos: DatosFiltros }) {
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {periodoLegible(f.periodo_efectivo)}
-                        {f.fuera_de_ciclo && (
-                          <span className="ml-2">
-                            <Estado tono="info">Fuera de ciclo</Estado>
+                        {f.tipo !== "normal" && (
+                          <span className="ml-2" title={f.tipo === "reliquidacion" ? "Incluye el total de su liquidación fuera de ciclo del mismo mes" : undefined}>
+                            <Estado tono="info">{ETIQUETA_LIQUIDACION[f.tipo]}</Estado>
                           </span>
                         )}
                       </td>

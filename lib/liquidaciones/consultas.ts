@@ -1,7 +1,7 @@
 import type { QueryResultRow } from "pg";
 import { pool } from "@/lib/db";
 import { normalizar } from "@/lib/liquidaciones/formato";
-import type { Acceso, Empresa, Filtros } from "@/lib/liquidaciones/tipos";
+import type { Acceso, Empresa, FilaVista, Filtros } from "@/lib/liquidaciones/tipos";
 import { conEncargados, leerEncargados } from "@/lib/encargados-cc";
 
 /**
@@ -106,6 +106,8 @@ export interface FilaListado {
   centro_costo: string | null;
   planta_noplanta: string | null;
   nombre_cc: string | null;
+  /** Si la liquidación solo trae el total a pagar (posición 800); null si no trae conceptos del PDF. */
+  solo_total: boolean | null;
 }
 
 /** Arma el filtro «persona»: número de personal exacto (como el original), RUT o nombre. */
@@ -203,7 +205,9 @@ export async function listarLiquidaciones(f: Filtros, acceso: Acceso): Promise<F
   const sql = `SELECT l.apellido_nombre, l.numero_de_personal, l.periodo_para_nomina,
        CASE WHEN l.periodo_para_nomina = '000000' THEN REPLACE(l.marca, '-', '') ELSE l.periodo_para_nomina END AS periodo_efectivo,
        COALESCE(l.tipo_calculo_nomina_perpara, '') AS tipo_calculo,
-       l.sociedad, m.centro_costo, c.planta_noplanta, MAX(m.nombre_centro_costo) AS nombre_cc
+       l.sociedad, m.centro_costo, c.planta_noplanta, MAX(m.nombre_centro_costo) AS nombre_cc,
+       -- Si solo trae el total a pagar, con los mismos conceptos que el PDF (ver reliquidaciones()).
+       bool_and(p.posicion = 800) FILTER (WHERE p.tipo IS NOT NULL AND l.tipo_calculo_nomina_perpara <> 'A') AS solo_total
      FROM ${LIQ} l
      INNER JOIN flesan_rrhh.sap_tabla_paso_liquidaciones p ON p.cc_nimina_sap = l.cc_nomina
      LEFT JOIN flesan_rrhh.sap_maestro_colaborador m
@@ -237,6 +241,36 @@ export interface ClaveLiquidacion {
 
 export function claveDe(l: ClaveLiquidacion) {
   return `${l.numero_de_personal}|${l.periodo_para_nomina}|${l.periodo_efectivo}`;
+}
+
+/** Una fila por liquidación: el listado repite la liquidación de quien aparece con dos sociedades o CC. */
+export function unaPorClave<T extends ClaveLiquidacion>(filas: T[]): T[] {
+  const vistas = new Set<string>();
+  return filas.filter((f) => {
+    const clave = claveDe(f);
+    if (vistas.has(clave)) return false;
+    vistas.add(clave);
+    return true;
+  });
+}
+
+const esFueraDeCiclo = (l: ClaveLiquidacion) => l.periodo_para_nomina === "000000";
+
+/**
+ * Reliquidaciones (2026-10-21): la fuera de ciclo que se suma a una liquidación normal, por la clave de
+ * cada normal. Se suman si son del mismo NP, mes y sociedad y la fuera de ciclo solo trae el total a
+ * pagar (posición 800): el detalle de la normal ya la incluye y su total no (jul-sep 2026: 263 casos,
+ * todos cuadran al sumar). Quien fue finiquitado y recontratado el mismo mes tiene otro NP: no se suma.
+ */
+export function reliquidaciones<T extends ClaveLiquidacion & { sociedad: string | null; solo_total: boolean | null }>(filas: T[]): Map<string, T> {
+  const personaMes = (l: T) => `${l.numero_de_personal}|${l.periodo_efectivo}|${l.sociedad ?? ""}`;
+  const sumables = new Map(filas.filter((l) => esFueraDeCiclo(l) && l.solo_total).map((l) => [personaMes(l), l]));
+  const pares = new Map<string, T>();
+  for (const l of filas) {
+    const fueraDeCiclo = esFueraDeCiclo(l) ? undefined : sumables.get(personaMes(l));
+    if (fueraDeCiclo) pares.set(claveDe(l), fueraDeCiclo);
+  }
+  return pares;
 }
 
 /** $1-$3: las liquidaciones pedidas; $4: sus periodos de nómina sin repetir. Postgres 10 recorre
@@ -310,6 +344,58 @@ export async function resumirLiquidaciones(pedidos: ClaveLiquidacion[]): Promise
     arreglos(pedidos),
   );
   return new Map(rows.map((r) => [`${r.np}|${r.pn}|${r.pe}`, r]));
+}
+
+/** Las filas de la vista previa: una por liquidación (el original repetía la de quien aparecía con dos
+ * sociedades) y cada reliquidación en una sola, la normal con el líquido de su fuera de ciclo sumado. */
+export function filasVista(listado: FilaListado[], resumen: Map<string, ResumenLiquidacion>): FilaVista[] {
+  const unicas = unaPorClave(listado);
+  const pares = reliquidaciones(unicas);
+  const sumadas = new Set([...pares.values()].map(claveDe));
+  const liquido = (clave: string) => {
+    const v = resumen.get(clave)?.liquido;
+    return v == null ? null : Number(v);
+  };
+  return unicas
+    .filter((l) => !sumadas.has(claveDe(l)))
+    .map((l) => {
+      const clave = claveDe(l);
+      const r = resumen.get(clave);
+      const fueraDeCiclo = pares.get(clave);
+      const propio = liquido(clave);
+      return {
+        clave,
+        nombre: l.apellido_nombre,
+        numero_de_personal: l.numero_de_personal,
+        rut: r?.national_id ?? null,
+        sociedad: l.sociedad,
+        centro_costo: l.centro_costo,
+        nombre_cc: r?.nombre_centro_costo ?? null,
+        periodo_para_nomina: l.periodo_para_nomina,
+        periodo_efectivo: l.periodo_efectivo,
+        tipo: fueraDeCiclo ? "reliquidacion" : "normal",
+        liquido: fueraDeCiclo && propio !== null ? propio + (liquido(claveDe(fueraDeCiclo)) ?? 0) : propio,
+      };
+    });
+}
+
+/**
+ * Lo que va al PDF de las claves pedidas, entre las que el usuario puede ver: `elegidas` (una por
+ * clave; la de una fuera de ciclo que se suma cuenta como la de su normal) y `pedidos`, lo que hay que
+ * detallar: las elegidas y, tras cada reliquidación, su fuera de ciclo, que sumarReliquidaciones()
+ * junta en la misma página.
+ */
+export function elegirParaPdf(permitidas: FilaListado[], pedidas: Set<string>) {
+  const unicas = unaPorClave(permitidas);
+  const pares = reliquidaciones(unicas);
+  const normalDe = new Map([...pares].map(([normal, fueraDeCiclo]) => [claveDe(fueraDeCiclo), normal]));
+  const pedidasNormales = new Set([...pedidas].map((c) => normalDe.get(c) ?? c));
+  const elegidas = unicas.filter((l) => pedidasNormales.has(claveDe(l)) && !normalDe.has(claveDe(l)));
+  const pedidos = elegidas.flatMap((l) => {
+    const fueraDeCiclo = pares.get(claveDe(l));
+    return fueraDeCiclo ? [l, fueraDeCiclo] : [l];
+  });
+  return { elegidas, pedidos };
 }
 
 // ---------------------------------------------------------------- detalle (query del PDF)
@@ -451,6 +537,27 @@ export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promis
     }
   }
   return ordenadas;
+}
+
+/**
+ * Suma cada reliquidación en una sola página: a la liquidación normal se le agrega el total a pagar de
+ * su fuera de ciclo (la misma regla que reliquidaciones(), aquí con los conceptos), y la fuera de ciclo
+ * no sale aparte. El PDF muestra el detalle de la normal y como total la suma de las posiciones 800,
+ * que así cuadra con el detalle. La misma sociedad se compara por su RUT.
+ */
+export function sumarReliquidaciones(detalles: LiquidacionDetalle[]): LiquidacionDetalle[] {
+  const personaMes = (d: LiquidacionDetalle) => `${d.numero_de_personal}|${d.periodo_efectivo}|${d.rut_sociedad ?? ""}`;
+  const sumables = new Map(
+    detalles.filter((d) => esFueraDeCiclo(d) && d.conceptos.length && d.conceptos.every((c) => c.posicion === 800)).map((d) => [personaMes(d), d]),
+  );
+  const sumadas = new Set<LiquidacionDetalle>();
+  const resultado = detalles.map((d) => {
+    const fueraDeCiclo = esFueraDeCiclo(d) ? undefined : sumables.get(personaMes(d));
+    if (!fueraDeCiclo) return d;
+    sumadas.add(fueraDeCiclo);
+    return { ...d, conceptos: [...d.conceptos, ...fueraDeCiclo.conceptos] };
+  });
+  return resultado.filter((d) => !sumadas.has(d));
 }
 
 // ---------------------------------------------------------------- correos (envío mensual)

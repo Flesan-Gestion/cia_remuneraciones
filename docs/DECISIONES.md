@@ -79,6 +79,20 @@ y el detalle en lote (el antiguo hacía una consulta de ~1 s por persona).
   o incluir también con el envío pausado, no solo antes de aprobar (2026-10-19). El CC y la planta
   se fijan al preparar el lote (`db/009`).
 
+## Reliquidación (2026-10-21)
+
+- Una liquidación fuera de ciclo (periodo 000000, tipo B) que **solo trae el total a pagar**
+  (posición 800) se suma a la liquidación normal del **mismo NP, mes y sociedad**: queda una sola,
+  con el detalle de la normal, el total a pagar de ambas y la etiqueta «Reliquidación». El detalle de
+  la normal ya incluye ese pago y su total no: sumados, cuadra (jul-sep 2026: 263 casos, todos).
+- Vale para la vista previa, el PDF descargado y el PDF del envío por correo (en el envío se decide
+  con los conceptos al armar el PDF, así que también aplica a los lotes ya preparados).
+- No se suman: quien fue finiquitado y recontratado el mismo mes (tiene otro NP), las fuera de ciclo
+  sin normal ese mes (finiquitos, ~85 a 200 al mes) ni la que trae su propio detalle (en agosto de
+  2026, una con sobregiro y cotización voluntaria, sin total). Esas se muestran como
+  normales, sin etiqueta (la etiqueta «Fuera de ciclo» se quitó).
+- El PDF no cambia de formato: solo el total a pagar de la reliquidación.
+
 ## Queda fuera
 
 - ZIP con un PDF por persona y el reemplazo de la dirección fija (propuestos, no aprobados).
