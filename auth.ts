@@ -24,6 +24,14 @@ const CIA_ADMINS = (process.env.CIA_ADMIN_EMAILS ?? "")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
+/**
+ * Override de pruebas: quien entra con el correo de la izquierda navega como el de la derecha
+ * (rol, perfil y datos del suplantado). El login sigue validando el correo real.
+ */
+const SUPLANTACIONES: Record<string, string> = {
+  "martin.norambuena@flesan.cl": "juan.mestanza@flesan.com.pe",
+};
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -51,7 +59,12 @@ const { handlers, signIn, signOut, auth: authOriginal } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        const email = String(token.email ?? session.user.email ?? "").toLowerCase();
+        const real = String(token.email ?? session.user.email ?? "").toLowerCase();
+        const email = SUPLANTACIONES[real] ?? real;
+        if (email !== real) {
+          session.user.email = email;
+          session.user.name = `${email} (como ${real})`;
+        }
         session.user.role = email ? await resolverRol(email) : "member";
       }
       return session;
