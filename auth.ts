@@ -29,7 +29,7 @@ const CIA_ADMINS = (process.env.CIA_ADMIN_EMAILS ?? "")
  * (rol, perfil y datos del suplantado). El login sigue validando el correo real.
  */
 const SUPLANTACIONES: Record<string, string> = {
-  "martin.norambuenaa@flesan.cl": "juan.mestanza@flesan.com.pe",
+  "martin.norambuena@flesan.cl": "diego.arredondo@cenia.cl",
 };
 
 declare module "next-auth" {
