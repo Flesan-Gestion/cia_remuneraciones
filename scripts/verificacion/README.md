@@ -51,4 +51,6 @@ node libro/escenario.cjs <nombre> <rol 1-5> <correo> <empresa|0> <cc|0> <desde> 
 ```
 
 Diferencias esperadas: las decisiones del libro en docs/DECISIONES.md, por ejemplo NFG, que ya nadie
-ve fuera de Administrador.
+ve fuera de Administrador. Desde el 2026-10-27, quien cambió de CC en el mes sale en una sola fila, en
+el CC de cierre: el original lo separa en una fila por CC, así que esas personas salen como diferencia
+(y con el filtro de CC, también las que llegaron o se fueron de ese CC en el mes).

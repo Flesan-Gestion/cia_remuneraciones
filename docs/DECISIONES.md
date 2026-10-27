@@ -196,6 +196,38 @@ filas, el aviso «Sin resultados» en vez de un Excel vacío.
   las demás columnas quedan idénticas y Excel, al recalcular, da lo mismo que el resultado guardado
   (2.695 filas).
 
+### Un solo CC por persona y mes (requerimiento del 2026-10-27)
+
+- Quien cambia de CC en el mes salía en una fila por CC (por ejemplo, 1 día en el CC anterior y 29 en
+  el nuevo), aunque su liquidación es una sola, con los 30 días. Ahora sale en **una fila, en el CC que
+  tenía al cierre del mes**, con todos los días y conceptos. Solo en este libro: el libro prorrateado
+  sigue separado por CC (decisión del usuario).
+- El CC de cierre es el CC donde SAP deja el líquido a pago (`/559`), que va al último tramo del mes
+  (`CC_CIERRE` en `lib/libro/consultas.ts`). Entre enero de 2025 y octubre de 2026, en las 533
+  personas-mes con filas en más de un CC, el líquido cayó siempre en uno solo; coincide con el CC
+  vigente el último día del mes según el historial de SAP (`sap_maestro_historial_eventos`) en los 517
+  casos comparables y, en octubre de 2026, con el del maestro (86 de 86). Sin líquido (4 casos,
+  personas sin días en el mes): el CC con más registros, que también coincide con el historial.
+- Se descartó el CC del maestro (`sap_maestro_colaborador`; 41111/41119 es el estado del contrato, no
+  del CC): es el CC de hoy, no el de cada mes. Sirve para el mes en curso, pero en el libro de marzo de
+  2026 habría cambiado de CC a 228 personas que estuvieron todo ese mes en un solo CC.
+- Efectos:
+  - Menos filas: una por persona y mes (todas las empresas, octubre de 2026: 1.635 → 1.548).
+  - El costo empresa va entero en esa fila.
+  - El IMPONIBLE sale una vez. Antes se repetía en cada fila de la persona, así que sumar la columna
+    lo duplicaba para quien cambió de CC.
+  - El filtro de centro de costo usa el CC de cierre: el CC anterior ya no muestra a quien se fue en
+    ese mes, y el nuevo lo muestra con el mes completo.
+  - Quién ve a quién no cambia: los encargados y GGO ya se filtraban por el CC del maestro.
+- Verificado el 2026-10-27 con el código real, antes y después, en 21 escenarios (los cinco roles,
+  meses de 2025 y 2026, rangos de hasta 4 meses, filtros de empresa y de CC): mismas personas; por
+  persona y mes, los días y cada concepto suman lo mismo; las 410 personas-mes juntadas quedaron en el
+  CC del líquido (o en el de más registros, si no había líquido). El CC elegido es el del maestro en
+  octubre (87 de 87) y el del historial en los meses pasados (322 de 323: al historial le falta un
+  tramo del NP 51056 en febrero de 2026, y su liquidación muestra el CC nuevo). La consulta tarda lo
+  mismo que antes (la de GGO, menos: suma antes de cruzar con el maestro).
+- Contra el original (`scripts/verificacion`), esas personas salen como diferencia esperada.
+
 ## 2026-10-06 · Encargados de centros de costo administrados en la plataforma
 
 - Regla: **todos ven exactamente lo mismo que en los aplicativos antiguos.**

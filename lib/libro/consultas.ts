@@ -224,7 +224,33 @@ const LIQ_DEL_RANGO = `liq AS (
      OR (l.cc_nomina = ANY($3::text[]) AND replace(l.marca, '-', '') BETWEEN $1 AND $2)
 )`;
 
-/** Costo empresa por persona, mes de pago y CC (jb_costo_empresa del original). */
+/**
+ * El CC de cierre de cada persona y mes de pago (requerimiento del 2026-10-27; el original sacaba una
+ * fila por CC): quien cambió de CC en el mes sale en una sola fila, en el CC donde estaba al terminar
+ * el mes, con todos sus días y conceptos. Es el CC donde SAP deja el líquido a pago (/559), que va al
+ * último tramo del mes: entre enero de 2025 y octubre de 2026 cayó siempre en un solo CC, el vigente al
+ * cierre según el historial de SAP (517 de 517) y, en el mes en curso, el del maestro (86 de 86). Sin
+ * líquido (personas sin días en el mes), el CC con más registros.
+ *
+ * Se elige con pre_cc, las sumas por persona, mes y CC de cada fila (sin la nómina tipo A, antes del
+ * filtro de CC), que traen LIQUIDO_Y_REGISTROS; después esas sumas se juntan en el CC de cierre
+ * (CON_CC_CIERRE) sin volver a recorrer las liquidaciones.
+ */
+const LIQUIDO_Y_REGISTROS = "count(*) FILTER (WHERE l.cc_nomina = '/559') AS liquido, count(*) AS registros";
+
+const CC_CIERRE = `cc_cierre AS (
+  SELECT DISTINCT ON (numero_de_personal, mes_pago) numero_de_personal, mes_pago, centro_de_coste, denominacion
+  FROM pre_cc
+  GROUP BY numero_de_personal, mes_pago, centro_de_coste, denominacion
+  ORDER BY numero_de_personal, mes_pago, sum(liquido) > 0 DESC, sum(registros) DESC, centro_de_coste, denominacion
+)`;
+
+/** pre_cc (alias x) con el CC de cierre de la persona (alias k). */
+const CON_CC_CIERRE = `pre_cc x
+  JOIN cc_cierre k ON k.numero_de_personal = x.numero_de_personal AND k.mes_pago = x.mes_pago`;
+
+/** Costo empresa por persona y mes de pago (jb_costo_empresa del original, que además lo separaba por
+ * CC; aquí va entero en la fila del CC de cierre). */
 function costoEmpresa(excluir: string[]) {
   return `costo_empresa AS (
   SELECT ccnomina, CASE WHEN cuadratura = 'Costo Empresa (-)' THEN -1 ELSE 1 END AS multiplicador
@@ -233,11 +259,11 @@ function costoEmpresa(excluir: string[]) {
     ${excluir.length ? `AND NOT ccnomina IN (${excluir.map((x) => `'${x}'`).join(", ")})` : ""}
 ),
 jb_costo_empresa AS (
-  SELECT l.numero_de_personal, sum(l.importe::integer * ce.multiplicador) AS valor, l.mes_pago, l.centro_de_coste
+  SELECT l.numero_de_personal, sum(l.importe::integer * ce.multiplicador) AS valor, l.mes_pago
   FROM liq l
   JOIN costo_empresa ce ON ce.ccnomina = l.cc_nomina
   WHERE replace(l.mes_pago, '-', '') BETWEEN $1 AND $2
-  GROUP BY l.numero_de_personal, l.mes_pago, l.centro_de_coste
+  GROUP BY l.numero_de_personal, l.mes_pago
 )`;
 }
 
@@ -316,8 +342,7 @@ function joinsMaestro(x: string) {
   return `LEFT JOIN flesan_rrhh.sap_maestro_colaborador m ON m.user_id = ${x}.numero_de_personal::integer
   LEFT JOIN flesan_rrhh.sap_maestro_cargos c ON c.external_code = m.external_cod_cargo
   LEFT JOIN flesan_rrhh.sap_maestro_tipo_contrato tc ON tc.external_code = m.external_cod_tipo_contrato
-  LEFT JOIN jb_costo_empresa ce
-    ON ce.numero_de_personal = ${x}.numero_de_personal AND ce.mes_pago = ${x}.mes_pago AND ce.centro_de_coste = ${x}.centro_de_coste
+  LEFT JOIN jb_costo_empresa ce ON ce.numero_de_personal = ${x}.numero_de_personal AND ce.mes_pago = ${x}.mes_pago
   LEFT JOIN (SELECT centro_coto, max(administrativo) AS administrativo FROM flesan_rrhh.tabla_encargados_cc GROUP BY centro_coto) t
     ON t.centro_coto = ${CC_COLABORADOR}`;
 }
@@ -362,7 +387,7 @@ async function soloNoPlanta(acceso: AccesoLibro, verPlanta: string | undefined):
 export type FilaLibro = Record<string, string | null>;
 
 /**
- * El libro: una fila por persona, CC de la liquidación y mes de pago, con los conceptos en
+ * El libro: una fila por persona y mes de pago, en su CC de cierre (CC_CIERRE), con los conceptos en
  * columnas. Mismas reglas que el original según el rol:
  * - Administrador: todas las empresas (incluida NFG), con los filtros de empresa y CC.
  * - RRHH: todas menos NFG.
@@ -377,39 +402,60 @@ export async function consultarLibro(f: FiltrosLibro, acceso: AccesoLibro): Prom
   if (!acceso.rol) return [];
   const variante = varianteDe(acceso);
   const params: unknown[] = [f.desde, f.hasta, CODIGOS_IMPONIBLE, mesesDelRango(f.desde, f.hasta)];
-  // Condiciones sobre las liquidaciones (l) y sobre el maestro y el cargo (m, c).
+  // Condiciones sobre las liquidaciones (l), sobre el CC de cierre (x, k) y sobre el maestro y el cargo (m, c).
   let whereLiq = "";
+  let whereCc = "";
   let whereMaestro = "";
   if (f.empresa) {
     params.push(f.empresa);
     whereLiq += ` AND l.sociedad = $${params.length}`;
   }
   if (f.cc) {
+    // Sobre el CC de cierre: quien llegó al CC en el mes sale con el mes completo, y quien se fue ya
+    // no sale en el CC anterior.
     params.push(codigoCc(f.cc));
-    whereLiq += ` AND (l.sociedad || l.centro_de_coste) = $${params.length}`;
+    whereCc += ` AND (x.sociedad || k.centro_de_coste) = $${params.length}`;
   }
 
   if (variante === "ggo") {
+    // Como en el resto del libro, primero se suma por persona, mes y CC (pre_cc), se junta en el CC de
+    // cierre (pre) y después se cruza con el maestro y se agrupa con las columnas del original.
     params.push(acceso.correo);
     const sql = `WITH ${LIQ_DEL_RANGO},
-${costoEmpresa(EXCLUIDOS_COSTO_GGO)}
-SELECT ${columnasPersona("l")},
-  ${DIAS} AS dias,
+${costoEmpresa(EXCLUIDOS_COSTO_GGO)},
+pre_cc AS (
+  SELECT l.numero_de_personal, l.mes_pago, l.sociedad, l.centro_de_coste, l.denominacion,
+    ${LIQUIDO_Y_REGISTROS},
+    ${DIAS} AS dias,
+    sum(CASE WHEN l.cc_nomina = '/IF2' THEN l.importe::integer ELSE 0 END) AS vacaciones_proporcionales
+  FROM liq l
+  WHERE l.tipo_calculo_nomina_perpara != 'A' AND replace(l.mes_pago, '-', '') BETWEEN $1 AND $2${whereLiq}
+  GROUP BY 1, 2, 3, 4, 5
+),
+${CC_CIERRE},
+pre AS (
+  SELECT x.numero_de_personal, x.mes_pago, x.sociedad, k.centro_de_coste, k.denominacion,
+    sum(x.dias) AS dias, sum(x.vacaciones_proporcionales) AS vacaciones_proporcionales
+  FROM ${CON_CC_CIERRE}
+  WHERE true${whereCc}
+  GROUP BY 1, 2, 3, 4, 5
+)
+SELECT ${columnasPersona("p")},
+  sum(p.dias) AS dias,
   c.planta_noplanta AS planta,
-  COALESCE(ce.valor, 0) + sum(CASE WHEN l.cc_nomina = '/IF2' THEN l.importe::integer ELSE 0 END) AS costo_empresa,
-  replace(l.mes_pago, '-', '') AS ames,
+  COALESCE(ce.valor, 0) + sum(p.vacaciones_proporcionales) AS costo_empresa,
+  replace(p.mes_pago, '-', '') AS ames,
   cg.nombre_clasificacion_gasto
-FROM liq l
-  ${joinsMaestro("l")}
+FROM pre p
+  ${joinsMaestro("p")}
   LEFT JOIN flesan_rrhh.sap_maestro_clasificacion_gasto cg ON cg.id_clasificacion_gasto::varchar = m.id_clasificacion_gasto::varchar
 WHERE EXISTS (
     SELECT 1 FROM flesan_rrhh.tabla_encargados_cc e
     WHERE e.centro_coto = ${CC_COLABORADOR} AND strpos(lower(e.correo_ggo), $${params.length}) > 0
   )
-  AND l.tipo_calculo_nomina_perpara != 'A' AND replace(l.mes_pago, '-', '') BETWEEN $1 AND $2${whereLiq}
-GROUP BY m.fecha_termino, tc.nombre, m.fecha_fin_contrato, m.fecha_ingreso, l.sociedad, cc, nombre_completo, rut, np, cargo,
-  ce.valor, l.mes_pago, t.administrativo, c.planta_noplanta, cg.nombre_clasificacion_gasto
-ORDER BY replace(l.mes_pago, '-', ''), nombre_completo`;
+GROUP BY m.fecha_termino, tc.nombre, m.fecha_fin_contrato, m.fecha_ingreso, p.sociedad, cc, nombre_completo, rut, np, cargo,
+  ce.valor, p.mes_pago, t.administrativo, c.planta_noplanta, cg.nombre_clasificacion_gasto
+ORDER BY replace(p.mes_pago, '-', ''), nombre_completo`;
     return consultar<FilaLibro>(sql, params, "pesada");
   }
 
@@ -444,23 +490,33 @@ ORDER BY replace(l.mes_pago, '-', ''), nombre_completo`;
     whereLiq += ` AND NOT (l.sociedad = 'NFG')`;
   }
 
-  // Primero se suma cada concepto por persona, mes, CC y área de nómina sin cruzar nada (de
-  // ~150.000 filas por mes a ~2.000); después se cruza con el maestro y se agrupa con las
-  // columnas del original. El resultado es el mismo y se evita ordenar y cruzar todas las filas.
-  // El orden es el que daba el original (agrupaba ordenando por estas columnas); en «normal» el
-  // original además separaba por área de nómina.
+  // Primero se suma cada concepto por persona, mes, CC y área de nómina sin cruzar nada (pre_cc: de
+  // ~150.000 filas por mes a ~2.000) y esas sumas se juntan en el CC de cierre (pre); después se
+  // cruza con el maestro y se agrupa con las columnas del original. Así se evita ordenar y cruzar
+  // todas las filas. El orden es el que daba el original (agrupaba ordenando por estas columnas); en
+  // «normal» el original además separaba por área de nómina.
   const agrupacion = `p.sociedad, cc, nombre_completo, rut, np, cargo, tipo_contrato, fecha_ingreso, fecha_estimada_termino, fecha_retiro,
   ce.valor, p.mes_pago, t.administrativo, c.planta_noplanta, imp.imponible${variante === "normal" ? ", p.area_calculo_nomina_perpara" : ""}`;
   const conceptos = CONCEPTOS.filter((c) => c.tipo !== "imponible");
   const sql = `WITH ${LIQ_DEL_RANGO},
 ${costoEmpresa([])},
 ${IMPONIBLE},
-pre AS (
+pre_cc AS (
   SELECT l.numero_de_personal, l.mes_pago, l.sociedad, l.centro_de_coste, l.denominacion, l.area_calculo_nomina_perpara,
+    ${LIQUIDO_Y_REGISTROS},
     ${DIAS} AS dias,
     ${conceptos.map((c) => `${sumaConcepto(c)} AS ${c.clave}`).join(",\n    ")}
   FROM liq l
   WHERE l.tipo_calculo_nomina_perpara != 'A' AND replace(l.mes_pago, '-', '') BETWEEN $1 AND $2${whereLiq}
+  GROUP BY 1, 2, 3, 4, 5, 6
+),
+${CC_CIERRE},
+pre AS (
+  SELECT x.numero_de_personal, x.mes_pago, x.sociedad, k.centro_de_coste, k.denominacion, x.area_calculo_nomina_perpara,
+    sum(x.dias) AS dias,
+    ${conceptos.map((c) => `${c.tipo === "horas" ? "max" : "sum"}(x.${c.clave}) AS ${c.clave}`).join(",\n    ")}
+  FROM ${CON_CC_CIERRE}
+  WHERE true${whereCc}
   GROUP BY 1, 2, 3, 4, 5, 6
 )
 SELECT ${columnasPersona("p")},

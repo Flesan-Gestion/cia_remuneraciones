@@ -68,7 +68,8 @@ const MODULOS: Record<"libro" | "prorrateado" | "finiquitos", Modulo> = {
     ...MESES,
     api: "/api/libro",
     nombre: "libro de remuneraciones",
-    ayuda: "Una fila por persona, centro de costo y mes de pago, con cada concepto de la liquidación en una columna (solo los que tienen algún valor).",
+    ayuda:
+      "Una fila por persona y mes de pago, con cada concepto de la liquidación en una columna (solo los que tienen algún valor). El centro de costo es el que tenía la persona al cierre del mes: si cambió de centro de costo en el mes, todo queda en el último.",
     alcance: {
       administrador: "Todas las empresas; la razón social es opcional.",
       rrhh: "Todas las empresas, eligiendo una razón social.",
