@@ -89,6 +89,11 @@ export function tiposEnvio(liquidaciones: LiquidacionEnvio[]): TipoLiquidacion[]
   });
 }
 
+/** Si la persona solo tiene fuera de ciclo en el envío, sin normal: es un finiquito (docs/DECISIONES.md, Reliquidación). */
+export function esFiniquito(liquidaciones: LiquidacionEnvio[]) {
+  return liquidaciones.length > 0 && liquidaciones.every((l) => l.periodo_para_nomina === "000000");
+}
+
 /** Una liquidación encontrada, para la vista previa. */
 export interface FilaVista {
   /** numero_de_personal|periodo_para_nomina|periodo_efectivo */

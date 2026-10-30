@@ -8,7 +8,7 @@ import { ArrowLeft, Ban, ListChecks, MailCheck, Pause, Play, RotateCcw, Search, 
 import { cn } from "@/lib/cn";
 import { Desplegable, type OpcionDesplegable } from "@/components/desplegable";
 import { miles, normalizar, periodoLegible } from "@/lib/liquidaciones/formato";
-import { ETIQUETA_LIQUIDACION, tiposEnvio, type AccionExclusion, type DetalleEnvio, type Empresa, type EstadoEnvio, type Lote } from "@/lib/liquidaciones/tipos";
+import { esFiniquito, ETIQUETA_LIQUIDACION, tiposEnvio, type AccionExclusion, type DetalleEnvio, type Empresa, type EstadoEnvio, type Lote } from "@/lib/liquidaciones/tipos";
 import { Casilla, enviarJson, Estado, fechaHoraCorta, fetcher, Nota, Paginacion, Th, type Tono } from "@/components/liquidaciones/ui";
 import { ESTADOS_LOTE } from "@/components/liquidaciones/envios";
 
@@ -25,6 +25,9 @@ const POR_PAGINA = 50;
 /** Valor de filtro para quien no tiene el dato (los lotes preparados antes del 2026-10-19 no traen CC ni planta). */
 const SIN_DATO = "__sin__";
 const PLANTA: Record<string, string> = { PL: "Planta", NP: "No planta" };
+const TIPOS = { normal: "Normales", finiquito: "Finiquitos" };
+type TipoPersona = keyof typeof TIPOS;
+const tipoDe = (d: DetalleEnvio): TipoPersona => (esFiniquito(d.liquidaciones) ? "finiquito" : "normal");
 
 interface DatosLote {
   lote: Lote;
@@ -61,6 +64,7 @@ export function LoteEnvio({ id }: { id: number }) {
   // Nombres de las razones sociales: el lote guarda solo el código.
   const { data: filtros } = useSWR<{ empresas: Empresa[] }>("/api/liquidaciones/filtros", fetcher, { revalidateOnFocus: false });
   const [filtro, setFiltro] = useState<EstadoEnvio | "">("");
+  const [tipo, setTipo] = useState<TipoPersona | "">("");
   const [texto, setTexto] = useState("");
   const [empresas, setEmpresas] = useState<string[]>([]);
   const [centros, setCentros] = useState<string[]>([]);
@@ -91,8 +95,8 @@ export function LoteEnvio({ id }: { id: number }) {
       : opciones;
   }, [enCentros, planta]);
 
-  // Todos los filtros menos el estado: los chips de estado cuentan sobre esto.
-  const porFiltros = useMemo(() => {
+  // Todos los filtros menos el estado y el tipo: cada grupo de chips cuenta con el otro aplicado.
+  const sinChips = useMemo(() => {
     const palabras = normalizar(texto).split(/\s+/).filter(Boolean);
     return enCentros.filter((d) => {
       if (planta && (d.planta_noplanta || SIN_DATO) !== planta) return false;
@@ -101,10 +105,11 @@ export function LoteEnvio({ id }: { id: number }) {
       return palabras.every((p) => t.includes(p));
     });
   }, [enCentros, planta, texto]);
+  const porFiltros = useMemo(() => (tipo ? sinChips.filter((d) => tipoDe(d) === tipo) : sinChips), [sinChips, tipo]);
   const filtradas = useMemo(() => (filtro ? porFiltros.filter((d) => d.estado === filtro) : porFiltros), [porFiltros, filtro]);
-  useEffect(() => setPagina(0), [filtro, texto, empresas, centros, planta]);
+  useEffect(() => setPagina(0), [filtro, tipo, texto, empresas, centros, planta]);
   // Lo que se iba a confirmar cambia con los filtros o las marcas: se vuelve a pedir.
-  useEffect(() => setConfirmandoBloque(null), [filtro, texto, empresas, centros, planta, marcas]);
+  useEffect(() => setConfirmandoBloque(null), [filtro, tipo, texto, empresas, centros, planta, marcas]);
 
   if (isLoading) return <div className="skeleton h-64 rounded-flesan" />;
   if (error || !data) return <Nota tono="alerta" titulo="No se pudo leer el envío">{error?.message ?? "Intenta de nuevo."}</Nota>;
@@ -114,6 +119,7 @@ export function LoteEnvio({ id }: { id: number }) {
   const editable = lote.estado === "por_aprobar" || lote.estado === "pausado";
   const marcable = (d: DetalleEnvio) => editable && (d.estado === "pendiente" || d.estado === "excluido");
   const conteo = (e: EstadoEnvio) => porFiltros.filter((d) => d.estado === e).length;
+  const conteoTipo = (t: TipoPersona) => sinChips.filter((d) => tipoDe(d) === t && (!filtro || d.estado === filtro)).length;
   const aEnviar = lote.total - lote.excluidos - lote.sin_correo;
   const avance = aEnviar > 0 ? Math.round((lote.enviados / aEnviar) * 100) : 0;
   const paginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
@@ -121,7 +127,7 @@ export function LoteEnvio({ id }: { id: number }) {
 
   // Acciones en bloque: sobre las marcadas o, si no hay marcas, sobre lo filtrado.
   const marcadas = detalle.filter((d) => marcas.has(d.id) && marcable(d));
-  const hayFiltro = Boolean(filtro || texto.trim() || empresas.length || centros.length || planta);
+  const hayFiltro = Boolean(filtro || tipo || texto.trim() || empresas.length || centros.length || planta);
   const filtradasMarcables = filtradas.filter(marcable);
   const objetivo = marcadas.length ? marcadas : filtradasMarcables;
   // Filtradas que no se pueden excluir ni incluir (sin correo, enviadas, con error).
@@ -163,6 +169,7 @@ export function LoteEnvio({ id }: { id: number }) {
       centros.length ? `CC ${centros.map((c) => (c === SIN_DATO ? "sin dato" : c)).join(", ")}` : "",
       planta ? (planta === SIN_DATO ? "planta sin dato" : (PLANTA[planta] ?? planta).toLowerCase()) : "",
       filtro ? `estado ${ESTADOS_ENVIO[filtro].texto.toLowerCase()}` : "",
+      tipo ? TIPOS[tipo].toLowerCase() : "",
       texto.trim() ? `búsqueda «${texto.trim()}»` : "",
     ];
     return `las filtradas por ${partes.filter(Boolean).join(" · ")}`;
@@ -191,6 +198,7 @@ export function LoteEnvio({ id }: { id: number }) {
     setCentros([]);
     setPlanta("");
     setFiltro("");
+    setTipo("");
     setTexto("");
   }
 
@@ -373,6 +381,12 @@ export function LoteEnvio({ id }: { id: number }) {
               </button>
             );
           })}
+          <span className="w-px h-5 bg-border mx-1" aria-hidden />
+          {(["normal", "finiquito"] as const).map((t) => (
+            <button key={t} type="button" aria-pressed={tipo === t} onClick={() => setTipo(tipo === t ? "" : t)} className={cn("chip-flesan", tipo === t && "is-active")}>
+              {TIPOS[t]} · {miles(conteoTipo(t))}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -497,7 +511,7 @@ export function LoteEnvio({ id }: { id: number }) {
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted whitespace-nowrap">
-                    {tiposEnvio(d.liquidaciones).map((t) => ETIQUETA_LIQUIDACION[t]).join(" + ")}
+                    {esFiniquito(d.liquidaciones) ? "Finiquito" : tiposEnvio(d.liquidaciones).map((t) => ETIQUETA_LIQUIDACION[t]).join(" + ")}
                   </td>
                   <td className="px-3 py-2">
                     <Estado tono={ESTADOS_ENVIO[d.estado].tono}>{ESTADOS_ENVIO[d.estado].texto}</Estado>
