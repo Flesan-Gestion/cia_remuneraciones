@@ -28,6 +28,9 @@ const PLANTA: Record<string, string> = { PL: "Planta", NP: "No planta" };
 const TIPOS = { normal: "Normales", finiquito: "Finiquitos" };
 type TipoPersona = keyof typeof TIPOS;
 const tipoDe = (d: DetalleEnvio): TipoPersona => (esFiniquito(d.liquidaciones) ? "finiquito" : "normal");
+const SITUACIONES = { activo: "Activos", inactivo: "Inactivos" };
+type Situacion = keyof typeof SITUACIONES;
+const situacionDe = (d: DetalleEnvio): Situacion | null => (d.activo == null ? null : d.activo ? "activo" : "inactivo");
 
 interface DatosLote {
   lote: Lote;
@@ -65,6 +68,7 @@ export function LoteEnvio({ id }: { id: number }) {
   const { data: filtros } = useSWR<{ empresas: Empresa[] }>("/api/liquidaciones/filtros", fetcher, { revalidateOnFocus: false });
   const [filtro, setFiltro] = useState<EstadoEnvio | "">("");
   const [tipo, setTipo] = useState<TipoPersona | "">("");
+  const [situacion, setSituacion] = useState<Situacion | "">("");
   const [texto, setTexto] = useState("");
   const [empresas, setEmpresas] = useState<string[]>([]);
   const [centros, setCentros] = useState<string[]>([]);
@@ -95,7 +99,7 @@ export function LoteEnvio({ id }: { id: number }) {
       : opciones;
   }, [enCentros, planta]);
 
-  // Todos los filtros menos el estado y el tipo: cada grupo de chips cuenta con el otro aplicado.
+  // Todos los filtros menos los chips: cada grupo de chips cuenta con los otros aplicados.
   const sinChips = useMemo(() => {
     const palabras = normalizar(texto).split(/\s+/).filter(Boolean);
     return enCentros.filter((d) => {
@@ -105,11 +109,14 @@ export function LoteEnvio({ id }: { id: number }) {
       return palabras.every((p) => t.includes(p));
     });
   }, [enCentros, planta, texto]);
-  const porFiltros = useMemo(() => (tipo ? sinChips.filter((d) => tipoDe(d) === tipo) : sinChips), [sinChips, tipo]);
+  const porFiltros = useMemo(
+    () => sinChips.filter((d) => (!tipo || tipoDe(d) === tipo) && (!situacion || situacionDe(d) === situacion)),
+    [sinChips, tipo, situacion],
+  );
   const filtradas = useMemo(() => (filtro ? porFiltros.filter((d) => d.estado === filtro) : porFiltros), [porFiltros, filtro]);
-  useEffect(() => setPagina(0), [filtro, tipo, texto, empresas, centros, planta]);
+  useEffect(() => setPagina(0), [filtro, tipo, situacion, texto, empresas, centros, planta]);
   // Lo que se iba a confirmar cambia con los filtros o las marcas: se vuelve a pedir.
-  useEffect(() => setConfirmandoBloque(null), [filtro, tipo, texto, empresas, centros, planta, marcas]);
+  useEffect(() => setConfirmandoBloque(null), [filtro, tipo, situacion, texto, empresas, centros, planta, marcas]);
 
   if (isLoading) return <div className="skeleton h-64 rounded-flesan" />;
   if (error || !data) return <Nota tono="alerta" titulo="No se pudo leer el envío">{error?.message ?? "Intenta de nuevo."}</Nota>;
@@ -119,7 +126,8 @@ export function LoteEnvio({ id }: { id: number }) {
   const editable = lote.estado === "por_aprobar" || lote.estado === "pausado";
   const marcable = (d: DetalleEnvio) => editable && (d.estado === "pendiente" || d.estado === "excluido");
   const conteo = (e: EstadoEnvio) => porFiltros.filter((d) => d.estado === e).length;
-  const conteoTipo = (t: TipoPersona) => sinChips.filter((d) => tipoDe(d) === t && (!filtro || d.estado === filtro)).length;
+  const conteoTipo = (t: TipoPersona) => sinChips.filter((d) => tipoDe(d) === t && (!situacion || situacionDe(d) === situacion) && (!filtro || d.estado === filtro)).length;
+  const conteoSituacion = (s: Situacion) => sinChips.filter((d) => situacionDe(d) === s && (!tipo || tipoDe(d) === tipo) && (!filtro || d.estado === filtro)).length;
   const aEnviar = lote.total - lote.excluidos - lote.sin_correo;
   const avance = aEnviar > 0 ? Math.round((lote.enviados / aEnviar) * 100) : 0;
   const paginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
@@ -127,7 +135,7 @@ export function LoteEnvio({ id }: { id: number }) {
 
   // Acciones en bloque: sobre las marcadas o, si no hay marcas, sobre lo filtrado.
   const marcadas = detalle.filter((d) => marcas.has(d.id) && marcable(d));
-  const hayFiltro = Boolean(filtro || tipo || texto.trim() || empresas.length || centros.length || planta);
+  const hayFiltro = Boolean(filtro || tipo || situacion || texto.trim() || empresas.length || centros.length || planta);
   const filtradasMarcables = filtradas.filter(marcable);
   const objetivo = marcadas.length ? marcadas : filtradasMarcables;
   // Filtradas que no se pueden excluir ni incluir (sin correo, enviadas, con error).
@@ -170,6 +178,7 @@ export function LoteEnvio({ id }: { id: number }) {
       planta ? (planta === SIN_DATO ? "planta sin dato" : (PLANTA[planta] ?? planta).toLowerCase()) : "",
       filtro ? `estado ${ESTADOS_ENVIO[filtro].texto.toLowerCase()}` : "",
       tipo ? TIPOS[tipo].toLowerCase() : "",
+      situacion ? SITUACIONES[situacion].toLowerCase() : "",
       texto.trim() ? `búsqueda «${texto.trim()}»` : "",
     ];
     return `las filtradas por ${partes.filter(Boolean).join(" · ")}`;
@@ -199,6 +208,7 @@ export function LoteEnvio({ id }: { id: number }) {
     setPlanta("");
     setFiltro("");
     setTipo("");
+    setSituacion("");
     setTexto("");
   }
 
@@ -385,6 +395,12 @@ export function LoteEnvio({ id }: { id: number }) {
           {(["normal", "finiquito"] as const).map((t) => (
             <button key={t} type="button" aria-pressed={tipo === t} onClick={() => setTipo(tipo === t ? "" : t)} className={cn("chip-flesan", tipo === t && "is-active")}>
               {TIPOS[t]} · {miles(conteoTipo(t))}
+            </button>
+          ))}
+          <span className="w-px h-5 bg-border mx-1" aria-hidden />
+          {(["activo", "inactivo"] as const).map((s) => (
+            <button key={s} type="button" aria-pressed={situacion === s} onClick={() => setSituacion(situacion === s ? "" : s)} className={cn("chip-flesan", situacion === s && "is-active")}>
+              {SITUACIONES[s]} · {miles(conteoSituacion(s))}
             </button>
           ))}
         </div>

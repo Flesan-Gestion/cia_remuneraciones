@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { registrarActividad } from "@/lib/actividad-db";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
+import { situacionColaboradores } from "@/lib/liquidaciones/consultas";
 import { cambiarEstadoLote, cerrarSiTermino, leerLote, listarDetalle, reintentarErrores } from "@/lib/liquidaciones/envios-db";
 import { ENVIO_HABILITADO, enviarPrueba, lanzarEnvio } from "@/lib/liquidaciones/envios";
 import type { EstadoLote } from "@/lib/liquidaciones/tipos";
@@ -22,7 +23,11 @@ export async function GET(_request: Request, { params }: Contexto) {
   try {
     const lote = await leerLote(ctx.id);
     if (!lote) return NextResponse.json({ error: "No existe ese envío." }, { status: 404 });
-    return NextResponse.json({ lote, detalle: await listarDetalle(ctx.id), envioHabilitado: ENVIO_HABILITADO });
+    const filas = await listarDetalle(ctx.id);
+    // La situación se lee del maestro en cada consulta: vale también para los lotes ya preparados.
+    const situacion = await situacionColaboradores(filas);
+    const detalle = filas.map((f) => ({ ...f, activo: situacion.get(`${f.numero_de_personal}|${f.sociedad ?? ""}`) ?? null }));
+    return NextResponse.json({ lote, detalle, envioHabilitado: ENVIO_HABILITADO });
   } catch (error) {
     console.error("Error al leer el lote:", error);
     return NextResponse.json({ error: "No se pudo leer la base de datos." }, { status: 500 });

@@ -618,3 +618,15 @@ export async function contactosColaboradores(personas: { numero_de_personal: str
   );
   return new Map(rows.map((r) => [`${r.numero_de_personal}|${r.sociedad}`, r]));
 }
+
+/** Situación actual de cada persona en el maestro: 41111 activo, 41119 inactivo; null si no está o trae otro código. */
+export async function situacionColaboradores(personas: { numero_de_personal: string; sociedad: string | null }[]) {
+  if (!personas.length) return new Map<string, boolean | null>();
+  const { rows } = await pool.query<{ np: string; soc: string; empl_status: string | null }>(
+    `SELECT p.np, p.soc, m.empl_status::text AS empl_status
+     FROM unnest($1::text[], $2::text[]) AS p(np, soc)
+     LEFT JOIN flesan_rrhh.sap_maestro_colaborador m ON m.user_id = p.np::integer AND m.empresa = p.soc`,
+    [personas.map((p) => p.numero_de_personal), personas.map((p) => p.sociedad ?? "")],
+  );
+  return new Map(rows.map((r) => [`${r.np}|${r.soc}`, r.empl_status === "41111" ? true : r.empl_status === "41119" ? false : null]));
+}

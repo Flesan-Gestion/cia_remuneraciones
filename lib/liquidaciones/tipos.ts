@@ -150,6 +150,8 @@ export interface DetalleEnvio {
   intentos: number;
   ultimo_error: string | null;
   enviado_en: string | null;
+  /** Situación actual en el maestro (solo al listar el lote); null si no se conoce. */
+  activo?: boolean | null;
 }
 
 export interface ConfiguracionEnvio {
