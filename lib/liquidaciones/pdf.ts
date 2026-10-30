@@ -87,8 +87,10 @@ export async function generarPdf(liquidaciones: LiquidacionDetalle[], clave?: st
       ? {
           pdfVersion: "1.7ext3" as const,
           userPassword: clave,
-          // Contraseña de propietario aleatoria: nadie puede quitar la protección.
-          ownerPassword: crypto.randomUUID(),
+          // Un PDF admite solo dos contraseñas. Con un RUT de menos de 8 dígitos, la de propietario es
+          // el mismo RUT con el 0 inicial, para que abra de las dos formas. Si no hay 0 que agregar, es
+          // aleatoria: nadie puede quitar la protección.
+          ownerPassword: clave.length < 8 ? clave.padStart(8, "0") : crypto.randomUUID(),
           permissions: { printing: "highResolution" as const, copying: true },
         }
       : {}),

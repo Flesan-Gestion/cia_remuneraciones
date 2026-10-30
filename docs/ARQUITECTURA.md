@@ -160,7 +160,9 @@ empresa y el imponible se calculan solo para los meses elegidos. Las semanas del
    se toman con `FOR UPDATE SKIP LOCKED` para que nadie envíe dos veces. Si el servidor se
    reinicia, lo que quedó «enviando» pasa a error («revisar si llegó») y no se reenvía solo.
 4. Cada persona recibe un PDF con todas sus liquidaciones del periodo (normal y fuera de ciclo),
-   cifrado AES-256 con su RUT sin dígito verificador como clave.
+   cifrado AES-256 con su RUT sin dígito verificador como clave. Un RUT de menos de 8 dígitos abre
+   con y sin el 0 inicial (7405831 o 07405831): la segunda forma ocupa la contraseña de propietario,
+   y un PDF no admite más de dos, por lo que la clave no puede incluir el dígito verificador.
 
 Solo la instancia de producción lleva `ENVIO_HABILITADO=true` (prepara y envía): dev y producción
 comparten la base de QA.

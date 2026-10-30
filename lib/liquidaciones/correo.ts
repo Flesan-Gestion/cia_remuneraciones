@@ -33,11 +33,19 @@ export function correoLiquidacion({ nombre, periodo, prueba }: { nombre: string;
     subject: `${prueba ? "[Prueba] " : ""}Liquidación de remuneraciones ${mes}`,
     html: marco(`${avisoPrueba}
   <p>${saludo}</p>
-  <p>Adjuntamos tu liquidación de remuneraciones de <b>${mes.toLowerCase()}</b>.</p>
-  <p>El archivo está protegido. Para abrirlo, usa tu <b>RUT sin puntos, sin guion y sin dígito verificador</b>.
+  <p>Te compartimos tu liquidación de remuneraciones de <b>${mes.toLowerCase()}</b>.</p>
+  <p>El archivo está protegido con una clave. Para abrirlo, usa tu <b>RUT sin puntos, sin guion y sin dígito verificador</b>.
      Por ejemplo, si tu RUT es 12.345.678-9, la clave es <b>12345678</b>.</p>
-  <p>Si tienes dudas sobre tu liquidación, escríbele a tu equipo de Personas.</p>
-  <p style="color:#58595B;font-size:12px">Este correo se envía automáticamente; no lo respondas.</p>`),
+  <p>Si tienes cualquier duda sobre tu liquidación, escríbenos: estamos acá para orientarte.<br>
+     Este correo se envía de forma automática, por lo que no es necesario responderlo. Para consultas, contáctanos a través de tu equipo de Personas en proyectos o en oficina central.</p>
+  <p style="margin-top:20px;color:#58595B;font-size:12px">
+     Gerencia de Gestión de Personas<br>
+     Grupo Flesan - Minería, Vialidad e Inmobiliaria<br>
+     Teléfono: (+56) 2 25309900<br>
+     E-mail: gestiondepersonas@flesan.cl<br>
+     Av. Apoquindo 6550, Piso 10 Las Condes, Santiago<br>
+     www.flesan.cl<br>
+     Chile / Perú</p>`),
     archivo: `Liquidacion_${mes.replace(" ", "_")}.pdf`,
   };
 }
