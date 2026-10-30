@@ -38,14 +38,14 @@ export function correoLiquidacion({ nombre, periodo, prueba }: { nombre: string;
      Por ejemplo, si tu RUT es 12.345.678-9, la clave es <b>12345678</b>.</p>
   <p>Si tienes cualquier duda sobre tu liquidación, escríbenos: estamos acá para orientarte.<br>
      Este correo se envía de forma automática, por lo que no es necesario responderlo. Para consultas, contáctanos a través de tu equipo de Personas en proyectos o en oficina central.</p>
-  <p style="margin-top:20px;color:#58595B;font-size:12px">
-     Gerencia de Gestión de Personas<br>
-     Grupo Flesan - Minería, Vialidad e Inmobiliaria<br>
-     Teléfono: (+56) 2 25309900<br>
-     E-mail: gestiondepersonas@flesan.cl<br>
-     Av. Apoquindo 6550, Piso 10 Las Condes, Santiago<br>
-     www.flesan.cl<br>
-     Chile / Perú</p>`),
+  <p style="margin-top:20px">
+     <b>Gerencia de Gestión de Personas</b><br>
+     <span style="color:#E30613">Grupo Flesan - Minería, Vialidad e Inmobiliaria</span><br>
+     <span style="color:#8C8C8C">Teléfono: (+56) 2 25309900</span><br>
+     E-mail: <a href="mailto:gestiondepersonas@flesan.cl" style="color:#8C8C8C;text-decoration:underline">gestiondepersonas@flesan.cl</a><br>
+     <a href="https://www.google.com/maps/search/?api=1&amp;query=Av.+Apoquindo+6550,+Las+Condes,+Santiago" style="color:#1155CC;text-decoration:underline">Av. Apoquindo 6550, Piso 10 Las Condes, Santiago</a><br>
+     <a href="https://www.flesan.cl" style="color:#1155CC;text-decoration:underline">www.flesan.cl</a><br>
+     <i>Chile / Perú</i></p>`),
     archivo: `Liquidacion_${mes.replace(" ", "_")}.pdf`,
   };
 }
