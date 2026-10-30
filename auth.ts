@@ -28,9 +28,7 @@ const CIA_ADMINS = (process.env.CIA_ADMIN_EMAILS ?? "")
  * Override de pruebas: quien entra con el correo de la izquierda navega como el de la derecha
  * (rol, perfil y datos del suplantado). El login sigue validando el correo real.
  */
-const SUPLANTACIONES: Record<string, string> = {
-  "martin.norambuena@flesan.cl": "diego.arredondo@cenia.cl",
-};
+const SUPLANTACIONES: Record<string, string> = {};
 
 declare module "next-auth" {
   interface Session {
