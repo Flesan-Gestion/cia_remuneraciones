@@ -38,6 +38,7 @@ export function correoLiquidacion({ nombre, periodo, prueba }: { nombre: string;
      Por ejemplo, si tu RUT es 12.345.678-9, la clave es <b>12345678</b>.</p>
   <p>Si tienes cualquier duda sobre tu liquidación, escríbenos: estamos acá para orientarte.<br>
      Este correo se envía de forma automática, por lo que no es necesario responderlo. Para consultas, contáctanos a través de tu equipo de Personas en proyectos o en oficina central.</p>
+  <p>Saludos cordiales.</p>
   <p style="margin-top:20px">
      <b>Gerencia de Gestión de Personas</b><br>
      <span style="color:#E30613">Grupo Flesan - Minería, Vialidad e Inmobiliaria</span><br>
