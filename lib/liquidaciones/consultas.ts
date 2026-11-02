@@ -445,8 +445,9 @@ interface FilaDetalle extends ClaveLiquidacion, ConceptoLiquidacion {
 
 /**
  * Conceptos de cada liquidación pedida, con los datos del encabezado. Es la consulta por persona
- * de liquidaciones_pdf_new.php hecha para todas a la vez: el cargo es el vigente antes del inicio
- * del periodo (historial de eventos) y se excluye el tipo de cálculo A. Desde el formato de SAP
+ * de liquidaciones_pdf_new.php hecha para todas a la vez: el cargo es el del último evento del
+ * historial antes del inicio del periodo (corregido 2026-11-02: el original fallaba con quien
+ * vuelve a un cargo anterior) y se excluye el tipo de cálculo A. Desde el formato de SAP
  * (2026-10-21) trae además el texto y el código SAP de cada concepto, los totales del encabezado, la
  * ubicación, el CC como lo nombra SAP y la AFP y la salud del mes. Devuelve las liquidaciones en el
  * orden pedido; las que no tienen conceptos no vienen (el original las saltaba).
@@ -455,19 +456,16 @@ export async function detallarLiquidaciones(pedidos: ClaveLiquidacion[]): Promis
   if (!pedidos.length) return [];
   const rows = await consultaEnLote<FilaDetalle>(
     `WITH ${PEDIDOS},
-     -- CTE «base» del original, para todas las personas en una pasada: por cada cargo, el mes en
-     -- que empezó (antes del inicio del periodo); gana el que empezó más tarde.
-     cambios AS (
-       SELECT q.np, q.pe, h.jobcode,
-         to_char(MIN((to_timestamp(h.startdate::double precision / 1000.0) AT TIME ZONE 'UTC')::date), 'YYYYMM') AS cambio_fecha
+     -- Cargo del periodo: el del último evento del historial que empezó antes del inicio del
+     -- periodo (a igual inicio, el modificado más tarde). El original agrupaba por cargo con
+     -- MIN(startdate) y fallaba con quien vuelve a un cargo que ya tuvo (A → B → A daba B).
+     base AS (
+       SELECT DISTINCT ON (q.np, q.pe) q.np, q.pe, h.jobcode
        FROM (SELECT DISTINCT np, pe FROM pedidos) q
        JOIN flesan_rrhh.sap_maestro_historial_eventos h
          ON h.userid = q.np
         AND h.startdate::numeric < (EXTRACT(EPOCH FROM to_timestamp(q.pe, 'YYYYMM') AT TIME ZONE 'UTC') * 1000)
-       GROUP BY q.np, q.pe, h.jobcode
-     ),
-     base AS (
-       SELECT DISTINCT ON (np, pe) np, pe, jobcode FROM cambios ORDER BY np, pe, cambio_fecha DESC
+       ORDER BY q.np, q.pe, h.startdate::numeric DESC, NULLIF(h.lastmodifieddatetime, '')::numeric DESC NULLS LAST
      ),
      -- Del encabezado de SAP, en las mismas filas de la liquidación: total imponible (/314), renta
      -- afecta a impuesto (/T23), la división de personal (la «Ubicación») y el nombre corto del CC.
