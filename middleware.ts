@@ -29,9 +29,16 @@ const AUTH_DISABLED = process.env.AUTH_DISABLED === "true" && process.env.NODE_E
  * healthcheck de Docker (/api/health), la página de login, los estáticos de
  * Next, los iconos y la carpeta /brand.
  */
+/** Rutas que aceptan Authorization: Bearer <token de servicio> en vez de sesión. */
+const RUTAS_TOKEN = new Set(["/api/liquidaciones/filtros", "/api/liquidaciones/buscar", "/api/liquidaciones/pdf"]);
+
 export default AUTH_DISABLED
   ? () => NextResponse.next()
   : auth((req) => {
+      // Token de servicio: la ruta lo valida (lib/liquidaciones/token-servicio.ts); el Edge no lee la base.
+      if (RUTAS_TOKEN.has(req.nextUrl.pathname) && /^Bearer\s/i.test(req.headers.get("authorization") ?? "")) {
+        return NextResponse.next();
+      }
       if (!req.auth) {
         const url = new URL("/login", req.nextUrl.origin);
         url.searchParams.set("callbackUrl", req.nextUrl.pathname + req.nextUrl.search);

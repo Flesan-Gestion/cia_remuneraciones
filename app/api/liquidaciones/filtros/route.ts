@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
+import { sesionServicio } from "@/lib/liquidaciones/token-servicio";
 import { listarEmpresas, listarPeriodos } from "@/lib/liquidaciones/consultas";
 
 /** Opciones de los filtros según el perfil: empresas y CC que puede ver, y periodos con datos. */
-export async function GET() {
-  const sesion = await sesionConAcceso();
+export async function GET(request: Request) {
+  const sesion = (await sesionConAcceso()) ?? (await sesionServicio(request));
   if (!sesion) return respuestaNoAutorizado();
   const { acceso } = sesion;
   if (acceso.perfil === "sin_acceso") {

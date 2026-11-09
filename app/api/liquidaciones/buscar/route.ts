@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
+import { sesionServicio } from "@/lib/liquidaciones/token-servicio";
 import { filasVista, listarLiquidaciones, resumirLiquidaciones } from "@/lib/liquidaciones/consultas";
 import { leerFiltros } from "@/lib/liquidaciones/validar";
 
 /** Vista previa: las liquidaciones que calzan con los filtros y que el usuario puede ver. */
 export async function POST(request: Request) {
-  const sesion = await sesionConAcceso();
+  const sesion = (await sesionConAcceso()) ?? (await sesionServicio(request));
   if (!sesion) return respuestaNoAutorizado();
   if (sesion.acceso.perfil === "sin_acceso") return respuestaNoAutorizado("No tienes acceso a liquidaciones.");
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { respuestaNoAutorizado } from "@/lib/auth-guard";
 import { registrarActividad } from "@/lib/actividad-db";
 import { sesionConAcceso } from "@/lib/liquidaciones/acceso";
+import { sesionServicio } from "@/lib/liquidaciones/token-servicio";
 import { detallarLiquidaciones, elegirParaPdf, listarLiquidaciones, sumarReliquidaciones } from "@/lib/liquidaciones/consultas";
 import { generarPdf } from "@/lib/liquidaciones/pdf";
 import { leerFiltros } from "@/lib/liquidaciones/validar";
@@ -12,7 +13,7 @@ import { leerFiltros } from "@/lib/liquidaciones/validar";
  * Cada descarga queda en el registro de actividad con la lista de personas.
  */
 export async function POST(request: Request) {
-  const sesion = await sesionConAcceso();
+  const sesion = (await sesionConAcceso()) ?? (await sesionServicio(request));
   if (!sesion) return respuestaNoAutorizado();
   if (sesion.acceso.perfil === "sin_acceso") return respuestaNoAutorizado("No tienes acceso a liquidaciones.");
 
