@@ -108,6 +108,10 @@ export interface FilaVista {
   periodo_efectivo: string;
   tipo: TipoLiquidacion;
   liquido: number | null;
+  /** Total imponible (/314 de SAP); null si SAP no lo trae. */
+  imponible: number | null;
+  /** Días trabajados (posición 700, tope 30), como en el PDF. */
+  dias_trabajados: number | null;
 }
 
 export type EstadoLote = "por_aprobar" | "enviando" | "pausado" | "enviado" | "cancelado";

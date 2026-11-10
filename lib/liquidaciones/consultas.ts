@@ -322,25 +322,41 @@ export interface ResumenLiquidacion {
   national_id: string | null;
   nombre_centro_costo: string | null;
   liquido: string | null;
+  /** Total imponible (/314) y días trabajados (posición 700, tope 30), como en el PDF. */
+  imponible: string | null;
+  dias_trabajados: string | null;
 }
 
-/** RUT, nombre del CC y líquido a pagar (posición 800) de cada liquidación, para la vista previa. */
+/** RUT, nombre del CC, líquido a pagar (posición 800), imponible y días trabajados de cada liquidación,
+ * para la vista previa. */
 export async function resumirLiquidaciones(pedidos: ClaveLiquidacion[]): Promise<Map<string, ResumenLiquidacion>> {
   if (!pedidos.length) return new Map();
   const rows = await consultaEnLote<ResumenLiquidacion>(
-    `WITH ${PEDIDOS}
+    `WITH ${PEDIDOS},
+     -- El /314 no es un concepto de la tabla de paso: se suma aparte, como el encabezado del PDF.
+     imponible AS (
+       SELECT p.np, p.pn, p.pe, SUM(l.importe::numeric)::text AS imponible
+       FROM pedidos p
+       JOIN liq l
+         ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
+       WHERE l.cc_nomina = '/314' AND l.tipo_calculo_nomina_perpara <> 'A'
+       GROUP BY 1, 2, 3
+     )
      SELECT p.np, p.pn, p.pe,
        MAX(m.national_id) AS national_id,
        MAX(m.nombre_centro_costo) AS nombre_centro_costo,
-       SUM(CASE WHEN t.posicion = 800 THEN l.importe::integer END)::text AS liquido
+       SUM(CASE WHEN t.posicion = 800 THEN l.importe::integer END)::text AS liquido,
+       i.imponible,
+       LEAST(30, COALESCE(SUM(CASE WHEN t.posicion = 700 THEN REPLACE(l.cantidad, ',', '.')::double precision END), 0))::text AS dias_trabajados
      FROM pedidos p
      JOIN liq l
        ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
      JOIN flesan_rrhh.sap_tabla_paso_liquidaciones t ON t.cc_nimina_sap = l.cc_nomina
      LEFT JOIN flesan_rrhh.sap_maestro_colaborador m
        ON m.user_id = l.numero_de_personal::integer AND m.empresa = l.sociedad
+     LEFT JOIN imponible i ON i.np = p.np AND i.pn = p.pn AND i.pe = p.pe
      WHERE t.tipo IS NOT NULL AND l.tipo_calculo_nomina_perpara <> 'A'
-     GROUP BY 1, 2, 3`,
+     GROUP BY 1, 2, 3, i.imponible`,
     arreglos(pedidos),
   );
   return new Map(rows.map((r) => [`${r.np}|${r.pn}|${r.pe}`, r]));
@@ -352,10 +368,8 @@ export function filasVista(listado: FilaListado[], resumen: Map<string, ResumenL
   const unicas = unaPorClave(listado);
   const pares = reliquidaciones(unicas);
   const sumadas = new Set([...pares.values()].map(claveDe));
-  const liquido = (clave: string) => {
-    const v = resumen.get(clave)?.liquido;
-    return v == null ? null : Number(v);
-  };
+  const numero = (v: string | null | undefined) => (v == null ? null : Number(v));
+  const liquido = (clave: string) => numero(resumen.get(clave)?.liquido);
   return unicas
     .filter((l) => !sumadas.has(claveDe(l)))
     .map((l) => {
@@ -375,6 +389,9 @@ export function filasVista(listado: FilaListado[], resumen: Map<string, ResumenL
         periodo_efectivo: l.periodo_efectivo,
         tipo: fueraDeCiclo ? "reliquidacion" : "normal",
         liquido: fueraDeCiclo && propio !== null ? propio + (liquido(claveDe(fueraDeCiclo)) ?? 0) : propio,
+        // En una reliquidación, los de la normal: la fuera de ciclo solo trae el total a pagar (igual que el PDF).
+        imponible: numero(r?.imponible),
+        dias_trabajados: numero(r?.dias_trabajados),
       };
     });
 }
