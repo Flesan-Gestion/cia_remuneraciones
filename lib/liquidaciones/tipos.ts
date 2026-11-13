@@ -112,6 +112,16 @@ export interface FilaVista {
   imponible: number | null;
   /** Días trabajados (posición 700, tope 30), como en el PDF. */
   dias_trabajados: number | null;
+  /** AFP del mes, la misma del PDF, con su nombre («Uno», «PlanVital»); lo que no es AFP va como lo trae SAP
+   * («INP Empart», «Sin Cotización»). null si SAP no tiene previsión para la persona. */
+  afp: string | null;
+  /** Si SAP marca a la persona como pensionada (por vejez o invalidez) en la nómina normal del mes. null antes de
+   * marzo de 2024 (SAP aún no lo marcaba) o sin nómina normal (ver docs/DECISIONES.md, Datos de previsión). */
+  pensionado: boolean | null;
+  /** Si cotiza al seguro de cesantía (AFC): aporte del trabajador o del empleador en la nómina normal del mes. */
+  afc: boolean | null;
+  /** Fecha de ingreso, la misma del PDF, en AAAA-MM-DD. */
+  fecha_ingreso: string | null;
 }
 
 export type EstadoLote = "por_aprobar" | "enviando" | "pausado" | "enviado" | "cancelado";

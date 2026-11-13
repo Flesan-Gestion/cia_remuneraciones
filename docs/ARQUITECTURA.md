@@ -82,7 +82,7 @@ login CIA):
 | `/api/configuracion/colaboradores` | GET | `adminOnly` — busca colaboradores en el maestro corporativo para asignarles rol. |
 
 | `/api/liquidaciones/filtros` | GET | Empresas y CC que el usuario puede ver, y periodos con datos. |
-| `/api/liquidaciones/buscar` | POST | Vista previa: liquidaciones que calzan con los filtros (con RUT, CC y líquido). |
+| `/api/liquidaciones/buscar` | POST | Vista previa: liquidaciones que calzan con los filtros (con RUT, CC, líquido, imponible, días trabajados, AFP, pensionado, AFC y fecha de ingreso). |
 | `/api/liquidaciones/pdf` | POST | PDF de las claves elegidas; recalcula el permiso con los filtros y registra la descarga. |
 | `/api/envios` | GET, POST | Solo RR.HH. — programación y lotes; preparar un lote a mano. |
 | `/api/envios/configuracion` | PUT | Solo RR.HH. — día del mes y si se prepara solo. |

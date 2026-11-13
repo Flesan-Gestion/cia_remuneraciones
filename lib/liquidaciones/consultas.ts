@@ -325,12 +325,43 @@ export interface ResumenLiquidacion {
   /** Total imponible (/314) y días trabajados (posición 700, tope 30), como en el PDF. */
   imponible: string | null;
   dias_trabajados: string | null;
+  /** AFP del mes como la trae SAP («AFP: Plan Vital»), con la regla del PDF. */
+  afp: string | null;
+  /** Fecha de ingreso del maestro, la del PDF, en AAAA-MM-DD. */
+  fecha_ingreso: string | null;
+  /** Indicador de pensionado y cotización al seguro de cesantía en la nómina normal de referencia. */
+  pensionado: boolean | null;
+  afc: boolean | null;
 }
 
-/** RUT, nombre del CC, líquido a pagar (posición 800), imponible y días trabajados de cada liquidación,
- * para la vista previa. */
+/** «202601» → «202512». */
+function mesAnterior(periodo: string) {
+  const anio = Number(periodo.slice(0, 4));
+  const mes = Number(periodo.slice(4, 6));
+  return mes === 1 ? `${anio - 1}12` : `${anio}${String(mes - 1).padStart(2, "0")}`;
+}
+
+/** Códigos de SAP: indicadores de pensionado (9I10 invalidez, 9I14 vejez; desde marzo de 2024) y cotización al
+ * seguro de cesantía del trabajador (MD09) y del empleador (/E01 indefinido, /E02 fondo solidario, /E03 plazo fijo). */
+const PENSIONADO = `('9I10', '9I14')`;
+const AFC = `('MD09', '/E01', '/E02', '/E03')`;
+
+/**
+ * RUT, nombre del CC, líquido a pagar (posición 800), imponible, días trabajados, AFP, fecha de ingreso, pensionado
+ * y AFC de cada liquidación, para la vista previa y la API (docs/DECISIONES.md, Datos de previsión).
+ */
 export async function resumirLiquidaciones(pedidos: ClaveLiquidacion[]): Promise<Map<string, ResumenLiquidacion>> {
   if (!pedidos.length) return new Map();
+  // Una fuera de ciclo sin normal en su mes (finiquito) toma pensionado y AFC de la normal del mes anterior:
+  // «liq» trae también esos meses (los cruces de abajo son por la clave exacta, así que no se mezclan).
+  const params = arreglos(pedidos);
+  const periodos = new Set(params[3]);
+  for (const p of pedidos) {
+    if (!esFueraDeCiclo(p)) continue;
+    periodos.add(p.periodo_efectivo);
+    periodos.add(mesAnterior(p.periodo_efectivo));
+  }
+  params[3] = [...periodos];
   const rows = await consultaEnLote<ResumenLiquidacion>(
     `WITH ${PEDIDOS},
      -- El /314 no es un concepto de la tabla de paso: se suma aparte, como el encabezado del PDF.
@@ -341,13 +372,60 @@ export async function resumirLiquidaciones(pedidos: ClaveLiquidacion[]): Promise
          ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
        WHERE l.cc_nomina = '/314' AND l.tipo_calculo_nomina_perpara <> 'A'
        GROUP BY 1, 2, 3
+     ),
+     -- Pensionado y AFC de cada persona y mes, en su nómina normal.
+     normal AS (
+       SELECT l.numero_de_personal AS np, l.periodo_para_nomina AS mes,
+         bool_or(l.cc_nomina IN ${PENSIONADO}) AS pensionado,
+         COALESCE(bool_or(CASE WHEN l.cc_nomina IN ${AFC} THEN l.importe::numeric <> 0 END), false) AS afc
+       FROM liq l
+       WHERE l.periodo_para_nomina <> '000000' AND l.tipo_calculo_nomina_perpara <> 'A'
+       GROUP BY 1, 2
+     ),
+     -- La nómina normal de referencia: la del mes; la fuera de ciclo sin normal ese mes, la del mes anterior.
+     referencia AS (
+       SELECT DISTINCT ON (p.np, p.pn, p.pe) p.np, p.pn, p.pe, n.mes, n.pensionado, n.afc
+       FROM pedidos p
+       JOIN normal n ON n.np = p.np
+        AND (n.mes = p.pe OR (p.pn = '000000' AND n.mes = to_char(to_date(p.pe, 'YYYYMM') - interval '1 month', 'YYYYMM')))
+       ORDER BY p.np, p.pn, p.pe, n.mes DESC
+     ),
+     -- Una fuera de ciclo que cotiza al seguro de cesantía (un finiquito con días del mes).
+     afc_propio AS (
+       SELECT p.np, p.pn, p.pe
+       FROM pedidos p
+       JOIN liq l
+         ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
+       WHERE p.pn = '000000' AND l.cc_nomina IN ${AFC} AND l.tipo_calculo_nomina_perpara <> 'A'
+       GROUP BY 1, 2, 3
+       HAVING bool_or(l.importe::numeric <> 0)
+     ),
+     -- AFP del mes (plan 0001), con la regla del PDF (prevision en detallarLiquidaciones).
+     afp AS (
+       SELECT DISTINCT ON (q.np, q.pe) q.np, q.pe, x.institucion
+       FROM (SELECT DISTINCT np, pe, (to_date(pe, 'YYYYMM') + interval '1 month')::date AS fin FROM pedidos) q
+       JOIN flesan_rrhh.xls_prevision_colaborador_g2 x ON ltrim(x.np, '0') = ltrim(q.np, '0') AND x.plan = '0001'
+       ORDER BY q.np, q.pe,
+         (x.fecha_desde < q.fin) DESC NULLS LAST,
+         CASE WHEN x.fecha_desde < q.fin THEN x.fecha_desde END DESC NULLS LAST,
+         x.fecha_desde, x.modificado_el DESC NULLS LAST, x.version DESC NULLS LAST
      )
      SELECT p.np, p.pn, p.pe,
        MAX(m.national_id) AS national_id,
        MAX(m.nombre_centro_costo) AS nombre_centro_costo,
        SUM(CASE WHEN t.posicion = 800 THEN l.importe::integer END)::text AS liquido,
        i.imponible,
-       LEAST(30, COALESCE(SUM(CASE WHEN t.posicion = 700 THEN REPLACE(l.cantidad, ',', '.')::double precision END), 0))::text AS dias_trabajados
+       LEAST(30, COALESCE(SUM(CASE WHEN t.posicion = 700 THEN REPLACE(l.cantidad, ',', '.')::double precision END), 0))::text AS dias_trabajados,
+       a.institucion AS afp,
+       -- La misma fecha que el PDF (detallarLiquidaciones), en AAAA-MM-DD.
+       to_char(MAX(
+         CASE
+           WHEN LENGTH(m.fecha_ingreso) = 12
+             THEN CAST(to_timestamp(SUBSTRING(m.fecha_ingreso, 1, 9)::bigint) + CAST('1 days' AS INTERVAL) AS DATE)
+           ELSE CAST(to_timestamp(SUBSTRING(m.fecha_ingreso, 1, 10)::bigint) + CAST('1 days' AS INTERVAL) AS DATE)
+         END), 'YYYY-MM-DD') AS fecha_ingreso,
+       CASE WHEN r.mes >= '202403' THEN r.pensionado END AS pensionado,
+       CASE WHEN ap.np IS NOT NULL THEN true ELSE r.afc END AS afc
      FROM pedidos p
      JOIN liq l
        ON l.numero_de_personal = p.np AND l.periodo_para_nomina = p.pn AND REPLACE(l.marca, '-', '') = p.pe
@@ -355,11 +433,20 @@ export async function resumirLiquidaciones(pedidos: ClaveLiquidacion[]): Promise
      LEFT JOIN flesan_rrhh.sap_maestro_colaborador m
        ON m.user_id = l.numero_de_personal::integer AND m.empresa = l.sociedad
      LEFT JOIN imponible i ON i.np = p.np AND i.pn = p.pn AND i.pe = p.pe
+     LEFT JOIN referencia r ON r.np = p.np AND r.pn = p.pn AND r.pe = p.pe
+     LEFT JOIN afc_propio ap ON ap.np = p.np AND ap.pn = p.pn AND ap.pe = p.pe
+     LEFT JOIN afp a ON a.np = p.np AND a.pe = p.pe
      WHERE t.tipo IS NOT NULL AND l.tipo_calculo_nomina_perpara <> 'A'
-     GROUP BY 1, 2, 3, i.imponible`,
-    arreglos(pedidos),
+     GROUP BY 1, 2, 3, i.imponible, a.institucion, r.mes, r.pensionado, r.afc, ap.np`,
+    params,
   );
   return new Map(rows.map((r) => [`${r.np}|${r.pn}|${r.pe}`, r]));
+}
+
+/** Nombre de la AFP para la API: sin el «AFP: » de SAP, como el PDF, y «PlanVital» junto, su nombre oficial. */
+function nombreAfp(institucion: string | null | undefined) {
+  const nombre = (institucion ?? "").replace(/^AFP:\s*/i, "").trim();
+  return nombre ? nombre.replace(/^Plan\s+Vital$/i, "PlanVital") : null;
 }
 
 /** Las filas de la vista previa: una por liquidación (el original repetía la de quien aparecía con dos
@@ -392,6 +479,10 @@ export function filasVista(listado: FilaListado[], resumen: Map<string, ResumenL
         // En una reliquidación, los de la normal: la fuera de ciclo solo trae el total a pagar (igual que el PDF).
         imponible: numero(r?.imponible),
         dias_trabajados: numero(r?.dias_trabajados),
+        afp: nombreAfp(r?.afp),
+        pensionado: r?.pensionado ?? null,
+        afc: r?.afc ?? null,
+        fecha_ingreso: r?.fecha_ingreso ?? null,
       };
     });
 }

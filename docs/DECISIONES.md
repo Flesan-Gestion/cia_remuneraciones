@@ -121,6 +121,33 @@ y el detalle en lote (el antiguo hacía una consulta de ~1 s por persona).
   anterior; ninguna queda sin AFP ni salud. El mes completo tarda ~11 s (antes ~8 s); una persona,
   lo mismo que antes.
 
+## Datos de previsión en la búsqueda (2026-11-13)
+
+Pedido para quien consume la API con token de servicio: `/api/liquidaciones/buscar` devuelve también,
+en cada liquidación, `afp`, `pensionado`, `afc` y `fecha_ingreso` (la vista previa no los muestra).
+
+- `afp`: la del PDF (plan 0001 de `xls_prevision_colaborador_g2`, la vigente en el mes) con su nombre:
+  «Uno», «PlanVital» (SAP dice «AFP: Plan Vital»). Lo que no es AFP va como lo trae SAP: «INP Empart»,
+  «INP SSS», «Sin Cotización». Igual que en el PDF, la tabla solo trae a la gente reciente: tiene la
+  previsión de 359 de las 2.060 personas con liquidación en 2024 y de 3.158 de las 3.408 de 2026.
+- `pensionado`: si la nómina normal del mes trae el indicador de SAP «Pensionado por vejez» (9I14) o
+  «Pensionado invalidez Comp» (9I10), con cantidad 1 e importe 0. SAP los pone desde marzo de 2024:
+  antes, `null`. No marca a todos: en octubre de 2026, 20 personas de 65 años o más (60 las mujeres)
+  no cotizan AFP ni AFC y no tienen indicador; salen `false`.
+- `afc`: si la nómina normal del mes trae cotización al seguro de cesantía del trabajador (MD09) o del
+  empleador (/E01 indefinido, /E03 plazo fijo, /E02 fondo solidario). Con licencia todo el mes el
+  empleador sigue cotizando y sale `true`; un mes sin imponible no trae cotización y sale `false` (6 en
+  octubre de 2026). No se usa el plan AFC (0003) de la previsión: lo tienen pensionados que no cotizan
+  y faltaba en 14 personas que sí cotizan (octubre de 2026).
+- `fecha_ingreso`: la del PDF (maestro), en AAAA-MM-DD.
+- Una fuera de ciclo sin normal en su mes (finiquito) toma `pensionado` y `afc` de la normal del mes
+  anterior, y `afc` también es `true` si la propia fuera de ciclo cotiza. Sin normal en esos dos meses
+  sale `null` (finiquitos pagados meses después: 31 en septiembre de 2026, 1 en octubre). En una
+  reliquidación, los de la normal.
+- Verificado en oct-2026 (1.815), sep-2026 (1.730), mar-2024 (689) y feb-2024 (550): los campos de
+  antes no cambian, `afp` y `fecha_ingreso` son los del PDF y `pensionado` y `afc` coinciden con un
+  cálculo aparte. La búsqueda de un mes completo tarda ~1 s más.
+
 ## Queda fuera
 
 - ZIP con un PDF por persona y el reemplazo de la dirección fija (propuestos, no aprobados).
